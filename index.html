@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR sin Marcadores - Detección de Superficies</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <title>AR sin WebGL - Detección de Superficies</title>
     <style>
         body {
             margin: 0;
@@ -30,7 +29,7 @@
             z-index: 1;
         }
         
-        #canvas {
+        #overlay {
             position: absolute;
             top: 0;
             left: 0;
@@ -140,16 +139,6 @@
             backdrop-filter: blur(10px);
         }
         
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { transform: translate(-50%, -50%) scale(1); }
-            50% { transform: translate(-50%, -50%) scale(1.1); }
-            100% { transform: translate(-50%, -50%) scale(1); }
-        }
-        
         .surface-indicator {
             position: absolute;
             width: 20px;
@@ -199,30 +188,115 @@
             font-size: 16px;
             margin: 10px;
         }
+
+        .virtual-object {
+            position: absolute;
+            pointer-events: none;
+            z-index: 300;
+            transition: all 0.3s ease;
+        }
+
+        .object-cube {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(45deg, #4CC3D9, #2E8B9B);
+            border: 2px solid #fff;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .object-sphere {
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle at 30% 30%, #FF6B9D, #EF2D5E);
+            border: 2px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .object-pyramid {
+            width: 0;
+            height: 0;
+            border-left: 30px solid transparent;
+            border-right: 30px solid transparent;
+            border-bottom: 60px solid #FFC65D;
+            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.3));
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .object-pokemon {
+            width: 80px;
+            height: 80px;
+            background: #FFD700;
+            border-radius: 50%;
+            position: relative;
+            border: 2px solid #fff;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .object-pokemon::before {
+            content: '⚡';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+        }
+
+        .object-pokemon::after {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: -10px;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 20px solid #FFD700;
+            transform: rotate(-20deg);
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(2deg); }
+        }
+
+        .placed-object {
+            animation: placeAnimation 0.5s ease-out;
+        }
+
+        @keyframes placeAnimation {
+            0% { transform: scale(0) rotate(0deg); opacity: 0; }
+            50% { transform: scale(1.2) rotate(180deg); opacity: 0.8; }
+            100% { transform: scale(1) rotate(360deg); opacity: 1; }
+        }
     </style>
 </head>
 <body>
     <div id="permissionDialog">
         <div class="dialog-content">
             <h2>📷 Acceso a la Cámara</h2>
-            <p>Esta aplicación necesita acceso a tu cámara para funcionar.</p>
-            <p>Haz clic en "Permitir" cuando tu navegador lo solicite.</p>
+            <p>Esta aplicación funciona sin WebGL y es compatible con todos los navegadores.</p>
+            <p>Haz clic en "Permitir" cuando tu navegador solicite acceso a la cámara.</p>
             <button class="dialog-btn" onclick="requestCamera()">🚀 Iniciar AR</button>
         </div>
     </div>
 
     <div id="container" style="display: none;">
         <video id="video" autoplay muted playsinline></video>
-        <canvas id="canvas"></canvas>
+        <canvas id="overlay"></canvas>
         
         <div id="ui">
-            <h3>🎯 AR sin Marcadores</h3>
-            <p><strong>Instrucciones:</strong></p>
+            <h3>🎯 AR Compatible</h3>
+            <p><strong>Funciona sin WebGL:</strong></p>
             <ul>
+                <li>Compatible con todos los navegadores</li>
                 <li>Mueve la cámara lentamente</li>
                 <li>Busca superficies planas</li>
-                <li>Toca "Colocar" cuando veas el punto verde</li>
-                <li>¡El objeto aparecerá en la superficie!</li>
+                <li>Toca "Colocar" cuando veas puntos verdes</li>
             </ul>
             <p><small>Estado: <span id="status">Iniciando...</span></small></p>
         </div>
@@ -231,7 +305,7 @@
         
         <div id="instructions">
             <h3>📱 Mueve tu dispositivo</h3>
-            <p>Apunta la cámara hacia superficies planas como:</p>
+            <p>Apunta la cámara hacia superficies como:</p>
             <ul style="text-align: left;">
                 <li>Mesa o escritorio</li>
                 <li>Suelo</li>
@@ -253,13 +327,13 @@
 
     <script>
         // Variables globales
-        let scene, camera, renderer, video, canvas, ctx;
-        let objects = [];
+        let video, overlay, ctx;
         let currentModel = 'cube';
         let surfacePoints = [];
         let isTracking = false;
         let placedObjects = [];
         let isInitialized = false;
+        let objectCounter = 0;
         
         // Solicitar permiso de cámara
         async function requestCamera() {
@@ -282,24 +356,12 @@
                 
                 // Configurar elementos
                 video = document.getElementById('video');
-                canvas = document.getElementById('canvas');
-                ctx = canvas.getContext('2d');
+                overlay = document.getElementById('overlay');
+                ctx = overlay.getContext('2d');
                 
-                // Configurar Three.js
-                scene = new THREE.Scene();
-                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                renderer = new THREE.WebGLRenderer({ 
-                    canvas: canvas, 
-                    alpha: true,
-                    antialias: true 
-                });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.setClearColor(0x000000, 0);
-                renderer.shadowMap.enabled = true;
-                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                
-                // Configurar luces
-                setupLights();
+                // Configurar canvas overlay
+                overlay.width = window.innerWidth;
+                overlay.height = window.innerHeight;
                 
                 // Solicitar acceso a la cámara
                 const constraints = {
@@ -322,15 +384,8 @@
                         updateStatus('✅ Cámara iniciada - Busca superficies');
                         document.getElementById('instructions').style.display = 'block';
                         
-                        // Ajustar canvas al tamaño del video
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        
                         // Iniciar detección de superficies
                         startSurfaceDetection();
-                        
-                        // Iniciar renderizado
-                        animate();
                         
                         isInitialized = true;
                     }).catch(error => {
@@ -354,16 +409,16 @@
             }
         }
         
-        // Simulación mejorada de detección de superficies
+        // Detección de superficies mejorada
         function startSurfaceDetection() {
             setInterval(() => {
                 if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
                     detectSurfaces();
                 }
-            }, 300);
+            }, 400);
         }
         
-        // Detectar superficies usando análisis de imagen básico
+        // Detectar superficies usando análisis de imagen
         function detectSurfaces() {
             if (!video || !video.videoWidth || !video.videoHeight) return;
             
@@ -375,8 +430,8 @@
                 // Crear canvas temporal para análisis
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = Math.min(video.videoWidth, 320);
-                tempCanvas.height = Math.min(video.videoHeight, 240);
+                tempCanvas.width = Math.min(video.videoWidth, 160);
+                tempCanvas.height = Math.min(video.videoHeight, 120);
                 
                 // Dibujar video en canvas temporal
                 tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
@@ -385,36 +440,35 @@
                 const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
                 const data = imageData.data;
                 
-                // Análisis simple de superficies basado en variación de color
-                const gridSize = 20;
-                const threshold = 30;
+                // Análisis de superficies basado en gradientes
+                const gridSize = 15;
+                const threshold = 25;
                 
                 for (let y = gridSize; y < tempCanvas.height - gridSize; y += gridSize) {
                     for (let x = gridSize; x < tempCanvas.width - gridSize; x += gridSize) {
-                        // Calcular varianza en una región pequeña
-                        let variance = calculateVariance(data, x, y, gridSize, tempCanvas.width);
+                        // Calcular gradiente en la región
+                        let gradient = calculateGradient(data, x, y, gridSize, tempCanvas.width);
                         
-                        // Si la varianza es baja, podría ser una superficie plana
-                        if (variance < threshold && Math.random() > 0.6) {
+                        // Si el gradiente es bajo, podría ser una superficie plana
+                        if (gradient < threshold && Math.random() > 0.7) {
                             // Convertir coordenadas de canvas a pantalla
                             const screenX = (x / tempCanvas.width) * window.innerWidth;
                             const screenY = (y / tempCanvas.height) * window.innerHeight;
                             
-                            surfacePoints.push({ x: screenX, y: screenY, confidence: 1 - (variance / threshold) });
+                            surfacePoints.push({ 
+                                x: screenX, 
+                                y: screenY, 
+                                confidence: 1 - (gradient / threshold),
+                                time: Date.now()
+                            });
                             showSurfaceIndicator(screenX, screenY);
                         }
                     }
                 }
                 
-                // Añadir algunos puntos simulados para asegurar detección
-                if (surfacePoints.length < 3) {
-                    for (let i = 0; i < 3; i++) {
-                        const x = Math.random() * window.innerWidth;
-                        const y = window.innerHeight * 0.3 + Math.random() * window.innerHeight * 0.4;
-                        
-                        surfacePoints.push({ x, y, confidence: 0.7 });
-                        showSurfaceIndicator(x, y);
-                    }
+                // Añadir puntos simulados si no se detectan suficientes
+                if (surfacePoints.length < 2) {
+                    addSimulatedSurfaces();
                 }
                 
                 if (surfacePoints.length > 0) {
@@ -430,47 +484,54 @@
                 }
                 
             } catch (error) {
-                console.error('Error en detección de superficies:', error);
-                // Continuar con detección simulada
-                simulateSurfaceDetection();
+                console.error('Error en detección:', error);
+                addSimulatedSurfaces();
             }
         }
         
-        // Calcular varianza de color en una región
-        function calculateVariance(data, centerX, centerY, size, width) {
-            let values = [];
+        // Calcular gradiente para detectar bordes
+        function calculateGradient(data, centerX, centerY, size, width) {
             const halfSize = Math.floor(size / 2);
+            let totalGradient = 0;
+            let count = 0;
             
-            for (let dy = -halfSize; dy < halfSize; dy++) {
-                for (let dx = -halfSize; dx < halfSize; dx++) {
-                    const x = centerX + dx;
-                    const y = centerY + dy;
-                    const index = (y * width + x) * 4;
+            for (let dy = -halfSize + 1; dy < halfSize; dy++) {
+                for (let dx = -halfSize + 1; dx < halfSize; dx++) {
+                    const x1 = centerX + dx;
+                    const y1 = centerY + dy;
+                    const x2 = x1 + 1;
+                    const y2 = y1 + 1;
                     
-                    if (index >= 0 && index < data.length - 3) {
-                        // Convertir a escala de grises
-                        const gray = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
-                        values.push(gray);
+                    const index1 = (y1 * width + x1) * 4;
+                    const index2 = (y2 * width + x2) * 4;
+                    
+                    if (index1 >= 0 && index2 < data.length - 3) {
+                        // Calcular diferencia de luminancia
+                        const lum1 = data[index1] * 0.299 + data[index1 + 1] * 0.587 + data[index1 + 2] * 0.114;
+                        const lum2 = data[index2] * 0.299 + data[index2 + 1] * 0.587 + data[index2 + 2] * 0.114;
+                        
+                        totalGradient += Math.abs(lum1 - lum2);
+                        count++;
                     }
                 }
             }
             
-            if (values.length === 0) return 100;
-            
-            const mean = values.reduce((a, b) => a + b, 0) / values.length;
-            const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-            
-            return variance;
+            return count > 0 ? totalGradient / count : 100;
         }
         
-        // Detección simulada como respaldo
-        function simulateSurfaceDetection() {
+        // Añadir superficies simuladas
+        function addSimulatedSurfaces() {
             for (let i = 0; i < 3; i++) {
-                if (Math.random() > 0.5) {
-                    const x = Math.random() * window.innerWidth;
-                    const y = window.innerHeight * 0.3 + Math.random() * window.innerHeight * 0.4;
+                if (Math.random() > 0.4) {
+                    const x = 100 + Math.random() * (window.innerWidth - 200);
+                    const y = window.innerHeight * 0.4 + Math.random() * window.innerHeight * 0.3;
                     
-                    surfacePoints.push({ x, y, confidence: 0.8 });
+                    surfacePoints.push({ 
+                        x, 
+                        y, 
+                        confidence: 0.7 + Math.random() * 0.3,
+                        time: Date.now()
+                    });
                     showSurfaceIndicator(x, y);
                 }
             }
@@ -502,78 +563,23 @@
             });
         }
         
-        // Crear modelo 3D
-        function createModel(type) {
-            let geometry, material, mesh;
+        // Crear objeto virtual 2D
+        function createVirtualObject(type, x, y) {
+            const object = document.createElement('div');
+            object.className = `virtual-object object-${type} placed-object`;
+            object.style.left = (x - 30) + 'px';
+            object.style.top = (y - 30) + 'px';
             
-            switch(type) {
-                case 'cube':
-                    geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-                    material = new THREE.MeshPhongMaterial({ 
-                        color: 0x4CC3D9,
-                        shininess: 100
-                    });
-                    break;
-                    
-                case 'sphere':
-                    geometry = new THREE.SphereGeometry(0.3, 32, 32);
-                    material = new THREE.MeshPhongMaterial({ 
-                        color: 0xEF2D5E,
-                        shininess: 100
-                    });
-                    break;
-                    
-                case 'pyramid':
-                    geometry = new THREE.ConeGeometry(0.3, 0.6, 4);
-                    material = new THREE.MeshPhongMaterial({ 
-                        color: 0xFFC65D,
-                        shininess: 100
-                    });
-                    break;
-                    
-                case 'pokemon':
-                    // Crear un "Pokémon" simple con formas básicas
-                    const group = new THREE.Group();
-                    
-                    // Cuerpo
-                    const bodyGeometry = new THREE.SphereGeometry(0.3, 32, 32);
-                    const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
-                    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-                    group.add(body);
-                    
-                    // Orejas
-                    const earGeometry = new THREE.ConeGeometry(0.1, 0.3, 8);
-                    const earMaterial = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
-                    
-                    const ear1 = new THREE.Mesh(earGeometry, earMaterial);
-                    ear1.position.set(-0.2, 0.3, 0.1);
-                    ear1.rotation.z = -0.3;
-                    group.add(ear1);
-                    
-                    const ear2 = new THREE.Mesh(earGeometry, earMaterial);
-                    ear2.position.set(0.2, 0.3, 0.1);
-                    ear2.rotation.z = 0.3;
-                    group.add(ear2);
-                    
-                    // Puntas negras de orejas
-                    const tipGeometry = new THREE.SphereGeometry(0.05, 16, 16);
-                    const tipMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
-                    
-                    const tip1 = new THREE.Mesh(tipGeometry, tipMaterial);
-                    tip1.position.set(-0.2, 0.45, 0.1);
-                    group.add(tip1);
-                    
-                    const tip2 = new THREE.Mesh(tipGeometry, tipMaterial);
-                    tip2.position.set(0.2, 0.45, 0.1);
-                    group.add(tip2);
-                    
-                    return group;
-            }
+            // Añadir datos del objeto
+            object.dataset.type = type;
+            object.dataset.id = 'obj_' + (++objectCounter);
+            object.dataset.createdAt = Date.now();
             
-            mesh = new THREE.Mesh(geometry, material);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            return mesh;
+            // Añadir efecto de rotación aleatoria
+            const randomRotation = Math.random() * 360;
+            object.style.transform = `rotate(${randomRotation}deg)`;
+            
+            return object;
         }
         
         // Colocar objeto en superficie
@@ -583,7 +589,7 @@
                 return;
             }
             
-            // Usar el punto más cercano al centro o el de mayor confianza
+            // Encontrar el mejor punto para colocar el objeto
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
             
@@ -596,7 +602,8 @@
                     Math.pow(point.y - centerY, 2)
                 );
                 const normalizedDistance = 1 - (distance / Math.sqrt(centerX * centerX + centerY * centerY));
-                const score = (point.confidence || 0.5) * 0.5 + normalizedDistance * 0.5;
+                const ageBonus = 1 - Math.min((Date.now() - point.time) / 5000, 0.5); // Prefiere puntos más recientes
+                const score = (point.confidence || 0.5) * 0.4 + normalizedDistance * 0.4 + ageBonus * 0.2;
                 
                 if (score > bestScore) {
                     bestScore = score;
@@ -605,60 +612,16 @@
             });
             
             // Crear y colocar el objeto
-            const model = createModel(currentModel);
-            
-            // Convertir coordenadas de pantalla a mundo 3D
-            const worldX = (bestPoint.x - centerX) / 300;
-            const worldZ = (bestPoint.y - centerY) / 300;
-            
-            model.position.set(worldX, 0, worldZ);
-            
-            // Añadir animaciones
-            addAnimations(model);
-            
-            scene.add(model);
-            placedObjects.push(model);
+            const virtualObject = createVirtualObject(currentModel, bestPoint.x, bestPoint.y);
+            document.getElementById('container').appendChild(virtualObject);
+            placedObjects.push(virtualObject);
             
             updateStatus(`✅ ${getModelName(currentModel)} colocado!`);
             
-            // Efecto de colocación
-            model.scale.set(0.1, 0.1, 0.1);
-            animateScale(model, { x: 1, y: 1, z: 1 }, 500);
-        }
-        
-        // Añadir animaciones a los objetos
-        function addAnimations(object) {
-            object.userData.animate = true;
-            object.userData.rotationSpeed = {
-                x: (Math.random() - 0.5) * 0.02,
-                y: (Math.random() - 0.5) * 0.02,
-                z: (Math.random() - 0.5) * 0.02
-            };
-            
-            object.userData.floatOffset = Math.random() * Math.PI * 2;
-            object.userData.floatSpeed = 0.02 + Math.random() * 0.02;
-        }
-        
-        // Animar escala
-        function animateScale(object, targetScale, duration) {
-            const startScale = { ...object.scale };
-            const startTime = Date.now();
-            
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const easeProgress = 1 - Math.pow(1 - progress, 3);
-                
-                object.scale.x = startScale.x + (targetScale.x - startScale.x) * easeProgress;
-                object.scale.y = startScale.y + (targetScale.y - startScale.y) * easeProgress;
-                object.scale.z = startScale.z + (targetScale.z - startScale.z) * easeProgress;
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                }
+            // Efecto sonoro simulado con vibración (si está disponible)
+            if (navigator.vibrate) {
+                navigator.vibrate(100);
             }
-            
-            animate();
         }
         
         // Cambiar modelo actual
@@ -675,9 +638,12 @@
         // Limpiar todos los objetos
         function clearObjects() {
             placedObjects.forEach(obj => {
-                scene.remove(obj);
+                if (obj.parentNode) {
+                    obj.parentNode.removeChild(obj);
+                }
             });
             placedObjects = [];
+            objectCounter = 0;
             updateStatus('🗑️ Objetos eliminados');
         }
         
@@ -700,53 +666,11 @@
             }
         }
         
-        // Configurar iluminación
-        function setupLights() {
-            // Luz ambiental
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-            scene.add(ambientLight);
-            
-            // Luz direccional principal
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(5, 10, 5);
-            directionalLight.castShadow = true;
-            directionalLight.shadow.mapSize.width = 2048;
-            directionalLight.shadow.mapSize.height = 2048;
-            scene.add(directionalLight);
-            
-            // Luz puntual
-            const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
-            pointLight.position.set(0, 5, 0);
-            scene.add(pointLight);
-        }
-        
-        // Bucle de animación
-        function animate() {
-            if (!isInitialized) return;
-            
-            requestAnimationFrame(animate);
-            
-            // Animar objetos colocados
-            placedObjects.forEach(obj => {
-                if (obj.userData.animate) {
-                    obj.rotation.x += obj.userData.rotationSpeed.x;
-                    obj.rotation.y += obj.userData.rotationSpeed.y;
-                    obj.rotation.z += obj.userData.rotationSpeed.z;
-                    
-                    obj.userData.floatOffset += obj.userData.floatSpeed;
-                    obj.position.y = Math.sin(obj.userData.floatOffset) * 0.1;
-                }
-            });
-            
-            renderer.render(scene, camera);
-        }
-        
         // Manejar redimensionado
         window.addEventListener('resize', () => {
-            if (camera && renderer) {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+            if (overlay) {
+                overlay.width = window.innerWidth;
+                overlay.height = window.innerHeight;
             }
         });
         
@@ -762,7 +686,25 @@
         // Inicializar cuando se carga la página
         window.addEventListener('load', () => {
             if (checkBrowserSupport()) {
-                // La inicialización se maneja por el botón de permisos
+                updateStatus('Listo para iniciar');
+            }
+        });
+
+        // Añadir interactividad a objetos colocados
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('virtual-object')) {
+                // Efecto de click en objeto
+                e.target.style.animation = 'none';
+                setTimeout(() => {
+                    e.target.style.animation = 'float 3s ease-in-out infinite';
+                }, 10);
+                
+                // Cambiar color temporalmente
+                const originalFilter = e.target.style.filter;
+                e.target.style.filter = 'brightness(1.5) saturate(1.5)';
+                setTimeout(() => {
+                    e.target.style.filter = originalFilter;
+                }, 200);
             }
         });
     </script>
