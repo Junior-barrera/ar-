@@ -3,89 +3,292 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VINCENTI SpA - AR Funcional</title>
-    <!-- Importación SEGURA de Model Viewer -->
-    <script type="module" src="https://unpkg.com/@google/model-viewer@^2.1.1/dist/model-viewer.min.js"></script>
+    <title>Visor AR - Modelos 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.0/aframe.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ar.js/2.2.2/aframe-ar.min.js"></script>
     <style>
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            text-align: center;
-            background: #f5f5f5;
+            overflow: hidden;
         }
-        model-viewer {
-            width: 100%;
-            height: 70vh;
-            margin: 0 auto;
-            background: #eee;
+        
+        #arContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
         }
-        .btn-ar {
-            background: #4285F4;
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
             color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 50px;
-            font-size: 16px;
-            margin: 20px;
-            cursor: pointer;
-        }
-        .warning {
-            color: #EA4335;
             padding: 15px;
-            background: #FFF3F3;
-            border-radius: 8px;
-            margin: 20px;
-            display: none; /* Oculto inicialmente */
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 300px;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-btn {
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .control-btn:hover {
+            background: white;
+            transform: scale(1.05);
+        }
+        
+        .control-btn.active {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        #markerInfo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 999;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 16px;
+        }
+        
+        .marker-link {
+            color: #4CAF50;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .marker-link:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
 <body>
-    <h1>Cámara de Seguridad en AR</h1>
-    
-    <!-- Model Viewer con configuración optimizada -->
-    <model-viewer
-        id="model-viewer"
-        src="https://cdn.glitch.global/6d2f3931-7c71-43a7-8d3e-6b6d5e5e8b9d/SecurityCamera.glb?v=1644356789045"
-        ar
-        ar-modes="scene-viewer webxr quick-look"
-        camera-controls
-        environment-image="neutral"
-        shadow-intensity="1"
-        auto-rotate
-        alt="Cámara 4K Hikvision">
+    <div id="arContainer">
+        <div id="ui">
+            <h3>🎯 Visor AR</h3>
+            <p><strong>Instrucciones:</strong></p>
+            <ul>
+                <li>Permite el acceso a la cámara</li>
+                <li>Apunta a un marcador AR</li>
+                <li>Los modelos 3D aparecerán sobre el marcador</li>
+                <li>Usa los controles para cambiar modelos</li>
+            </ul>
+            <p><small>Estado: <span id="status">Iniciando...</span></small></p>
+        </div>
         
-        <button class="btn-ar" slot="ar-button">
-            👁️ Ver en tu espacio
-        </button>
-    </model-viewer>
-
-    <!-- Mensaje de error/soporte -->
-    <div id="warning" class="warning">
-        <h3>⚠️ No se puede activar AR</h3>
-        <p id="warning-text"></p>
-        <p><a href="https://www.vincenti.cl" target="_blank">Ver producto en web</a></p>
+        <div id="markerInfo">
+            <h3>📱 ¿Necesitas un marcador?</h3>
+            <p>Descarga e imprime un marcador AR:</p>
+            <a href="https://ar-js-org.github.io/AR.js/data/images/hiro.png" 
+               target="_blank" class="marker-link">Descargar Marcador Hiro</a>
+            <p><small>Imprime el marcador en papel para mejor detección</small></p>
+        </div>
+        
+        <div id="controls">
+            <button class="control-btn active" onclick="changeModel('box')">📦 Caja</button>
+            <button class="control-btn" onclick="changeModel('sphere')">⚪ Esfera</button>
+            <button class="control-btn" onclick="changeModel('cylinder')">🔘 Cilindro</button>
+            <button class="control-btn" onclick="changeModel('text')">📝 Texto</button>
+        </div>
+        
+        <a-scene
+            id="arScene"
+            embedded
+            arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+            vr-mode-ui="enabled: false"
+            renderer="logarithmicDepthBuffer: true; colorManagement: true; sortObjects: true;">
+            
+            <a-assets>
+                <!-- Assets para texturas y materiales -->
+                <a-mixin id="animation-mixer" 
+                         animation-mixer="clip: *; repetitions: 1; clampWhenFinished: true"></a-mixin>
+            </a-assets>
+            
+            <!-- Marcador AR - Hiro por defecto -->
+            <a-marker id="marker" preset="hiro" smooth="true" smoothCount="10" smoothTolerance=".01" smoothThreshold="5">
+                
+                <!-- Modelo 3D - Caja por defecto -->
+                <a-entity id="model-container" position="0 0.5 0">
+                    
+                    <!-- Caja 3D -->
+                    <a-box id="box-model" 
+                           position="0 0 0" 
+                           rotation="0 45 0" 
+                           color="#4CC3D9" 
+                           shadow="cast: true"
+                           animation="property: rotation; to: 0 405 0; loop: true; dur: 10000">
+                        <a-animation attribute="position" 
+                                     dur="2000" 
+                                     to="0 0.2 0" 
+                                     direction="alternate" 
+                                     repeat="indefinite"></a-animation>
+                    </a-box>
+                    
+                    <!-- Esfera 3D -->
+                    <a-sphere id="sphere-model" 
+                              position="0 0 0" 
+                              radius="0.8" 
+                              color="#EF2D5E" 
+                              shadow="cast: true"
+                              visible="false"
+                              animation="property: rotation; to: 360 0 0; loop: true; dur: 5000">
+                        <a-animation attribute="scale" 
+                                     dur="3000" 
+                                     to="1.2 1.2 1.2" 
+                                     direction="alternate" 
+                                     repeat="indefinite"></a-animation>
+                    </a-sphere>
+                    
+                    <!-- Cilindro 3D -->
+                    <a-cylinder id="cylinder-model" 
+                                position="0 0 0" 
+                                radius="0.6" 
+                                height="1.5" 
+                                color="#FFC65D" 
+                                shadow="cast: true"
+                                visible="false"
+                                animation="property: rotation; to: 0 0 360; loop: true; dur: 8000">
+                        <a-animation attribute="position" 
+                                     dur="4000" 
+                                     to="0 0.5 0" 
+                                     direction="alternate" 
+                                     repeat="indefinite"></a-animation>
+                    </a-cylinder>
+                    
+                    <!-- Texto 3D -->
+                    <a-text id="text-model" 
+                            value="¡AR Funciona!" 
+                            position="0 0 0" 
+                            align="center" 
+                            color="#7BC8A4" 
+                            geometry="primitive: plane; width: 3; height: 1"
+                            material="color: rgba(0,0,0,0.8)"
+                            visible="false"
+                            animation="property: rotation; to: 0 360 0; loop: true; dur: 12000">
+                        <a-animation attribute="scale" 
+                                     dur="2000" 
+                                     to="1.1 1.1 1.1" 
+                                     direction="alternate" 
+                                     repeat="indefinite"></a-animation>
+                    </a-text>
+                    
+                </a-entity>
+                
+                <!-- Luces para mejor visualización -->
+                <a-light type="ambient" color="#404040" intensity="0.5"></a-light>
+                <a-light type="point" position="2 4 4" color="#ffffff" intensity="0.8"></a-light>
+                
+            </a-marker>
+            
+            <!-- Cámara -->
+            <a-entity camera look-controls-enabled="false"></a-entity>
+        </a-scene>
     </div>
 
     <script>
-        // Detección de compatibilidad con AR
-        document.addEventListener('DOMContentLoaded', () => {
-            const modelViewer = document.getElementById('model-viewer');
-            const warning = document.getElementById('warning');
-            const warningText = document.getElementById('warning-text');
-            
-            // Verificar si AR es soportado
-            modelViewer.addEventListener('ar-status', (event) => {
-                if (event.detail.status === 'failed') {
-                    warning.style.display = 'block';
-                    warningText.innerHTML = `
-                        Tu dispositivo/navegador no soporta AR. Prueba con:<br>
-                        - <strong>iPhone/iPad</strong>: Safari<br>
-                        - <strong>Android</strong>: Chrome último versión<br>
-                        <small>Modelo 3D visible solo en modo 3D</small>
-                    `;
-                }
+        let currentModel = 'box';
+        let markerDetected = false;
+        
+        // Función para cambiar modelo
+        function changeModel(modelType) {
+            // Actualizar botones activos
+            document.querySelectorAll('.control-btn').forEach(btn => {
+                btn.classList.remove('active');
             });
+            event.target.classList.add('active');
+            
+            // Ocultar todos los modelos
+            document.getElementById('box-model').setAttribute('visible', false);
+            document.getElementById('sphere-model').setAttribute('visible', false);
+            document.getElementById('cylinder-model').setAttribute('visible', false);
+            document.getElementById('text-model').setAttribute('visible', false);
+            
+            // Mostrar modelo seleccionado
+            document.getElementById(modelType + '-model').setAttribute('visible', true);
+            currentModel = modelType;
+            
+            updateStatus(`Modelo cambiado a: ${getModelName(modelType)}`);
+        }
+        
+        function getModelName(type) {
+            const names = {
+                'box': 'Caja 3D',
+                'sphere': 'Esfera 3D',
+                'cylinder': 'Cilindro 3D',
+                'text': 'Texto 3D'
+            };
+            return names[type] || type;
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+        
+        // Eventos de detección de marcador
+        document.addEventListener('DOMContentLoaded', function() {
+            const marker = document.getElementById('marker');
+            const markerInfo = document.getElementById('markerInfo');
+            
+            // Cuando se detecta el marcador
+            marker.addEventListener('markerFound', function() {
+                markerDetected = true;
+                markerInfo.style.display = 'none';
+                updateStatus('¡Marcador detectado! 🎯');
+                console.log('Marcador encontrado');
+            });
+            
+            // Cuando se pierde el marcador
+            marker.addEventListener('markerLost', function() {
+                markerDetected = false;
+                setTimeout(() => {
+                    if (!markerDetected) {
+                        markerInfo.style.display = 'block';
+                        updateStatus('Buscando marcador...');
+                    }
+                }, 3000);
+                console.log('Marcador perdido');
+            });
+            
+            // Inicialización
+            setTimeout(() => {
+                updateStatus('Cámara iniciada - Busca un marcador');
+            }, 2000);
         });
+        
+        // Control de errores de cámara
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(function(stream) {
+                updateStatus('Cámara accesible ✅');
+            })
+            .catch(function(err) {
+                updateStatus('Error: No se puede acceder a la cámara ❌');
+                console.error('Error accessing camera:', err);
+            });
     </script>
 </body>
 </html>
