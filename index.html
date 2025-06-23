@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR sin WebGL - Detección de Superficies</title>
+    <title>AR Pokémon Style - Detección 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body {
             margin: 0;
             padding: 0;
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
             overflow: hidden;
             background: #000;
+            user-select: none;
         }
         
         #container {
@@ -29,7 +31,7 @@
             z-index: 1;
         }
         
-        #overlay {
+        #threejs-container {
             position: absolute;
             top: 0;
             left: 0;
@@ -44,13 +46,14 @@
             top: 20px;
             left: 20px;
             z-index: 1000;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.85);
             color: white;
-            padding: 15px;
-            border-radius: 15px;
+            padding: 15px 20px;
+            border-radius: 20px;
             font-size: 14px;
-            max-width: 280px;
-            backdrop-filter: blur(10px);
+            max-width: 300px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         #crosshair {
@@ -59,11 +62,12 @@
             left: 50%;
             transform: translate(-50%, -50%);
             z-index: 999;
-            width: 40px;
-            height: 40px;
-            border: 2px solid rgba(255, 255, 255, 0.8);
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.9);
             border-radius: 50%;
             pointer-events: none;
+            animation: crosshairPulse 2s infinite;
         }
         
         #crosshair::before {
@@ -72,10 +76,15 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             background: rgba(255, 255, 255, 0.9);
             border-radius: 50%;
+        }
+        
+        @keyframes crosshairPulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
         }
         
         #controls {
@@ -85,43 +94,114 @@
             transform: translateX(-50%);
             z-index: 1000;
             display: flex;
-            gap: 10px;
+            gap: 15px;
             flex-wrap: wrap;
             justify-content: center;
+            pointer-events: auto;
         }
         
         .control-btn {
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.95);
             border: none;
-            padding: 12px 20px;
-            border-radius: 25px;
+            padding: 15px 25px;
+            border-radius: 30px;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.3s ease;
             backdrop-filter: blur(10px);
-            font-size: 12px;
+            font-size: 14px;
+            border: 2px solid transparent;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
         
         .control-btn:hover {
             background: rgba(255, 255, 255, 1);
             transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
         }
         
         .control-btn.active {
-            background: #4CAF50;
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
             color: white;
+            border-color: rgba(255, 255, 255, 0.3);
         }
         
-        #placeBtn {
-            background: #FF6B6B;
+        #catchBtn {
+            background: linear-gradient(45deg, #FF6B6B, #FF8E53);
             color: white;
             font-size: 16px;
-            padding: 15px 30px;
-            margin: 10px;
+            padding: 18px 35px;
+            animation: catchPulse 2s infinite;
         }
         
-        #placeBtn:hover {
-            background: #FF5252;
+        @keyframes catchPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        #permissionDialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .dialog-content {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 25px;
+            text-align: center;
+            max-width: 400px;
+            margin: 20px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        
+        .dialog-btn {
+            background: linear-gradient(45deg, #4ECDC4, #44A08D);
+            color: white;
+            border: none;
+            padding: 18px 35px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 15px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .dialog-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        
+        .surface-grid {
+            position: absolute;
+            pointer-events: none;
+            z-index: 300;
+            opacity: 0.6;
+        }
+        
+        .surface-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #4ECDC4;
+            border-radius: 50%;
+            animation: surfaceGlow 1.5s infinite;
+            box-shadow: 0 0 10px #4ECDC4;
+        }
+        
+        @keyframes surfaceGlow {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.5); opacity: 1; }
         }
         
         #instructions {
@@ -133,207 +213,341 @@
             background: rgba(0, 0, 0, 0.9);
             color: white;
             padding: 30px;
-            border-radius: 15px;
+            border-radius: 20px;
             text-align: center;
-            max-width: 300px;
-            backdrop-filter: blur(10px);
+            max-width: 350px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
-        .surface-indicator {
+        .pokemon-indicator {
             position: absolute;
-            width: 20px;
-            height: 20px;
-            background: rgba(76, 175, 80, 0.8);
-            border-radius: 50%;
-            pointer-events: none;
+            font-size: 24px;
             z-index: 500;
-            animation: surfacePulse 1.5s infinite;
+            animation: bounce 2s infinite;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
         }
         
-        @keyframes surfacePulse {
-            0% { transform: scale(1); opacity: 0.8; }
-            50% { transform: scale(1.5); opacity: 0.4; }
-            100% { transform: scale(1); opacity: 0.8; }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
         }
-
-        #permissionDialog {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 2000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .dialog-content {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            text-align: center;
-            max-width: 400px;
-            margin: 20px;
-        }
-
-        .dialog-btn {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 16px;
-            margin: 10px;
-        }
-
-        .virtual-object {
+        
+        .catch-effect {
             position: absolute;
+            width: 100px;
+            height: 100px;
+            border: 3px solid #FFD700;
+            border-radius: 50%;
+            animation: catchEffect 1s ease-out;
             pointer-events: none;
-            z-index: 300;
-            transition: all 0.3s ease;
+            z-index: 800;
         }
-
-        .object-cube {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(45deg, #4CC3D9, #2E8B9B);
-            border: 2px solid #fff;
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            animation: float 3s ease-in-out infinite;
-        }
-
-        .object-sphere {
-            width: 60px;
-            height: 60px;
-            background: radial-gradient(circle at 30% 30%, #FF6B9D, #EF2D5E);
-            border: 2px solid #fff;
-            border-radius: 50%;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            animation: float 3s ease-in-out infinite;
-        }
-
-        .object-pyramid {
-            width: 0;
-            height: 0;
-            border-left: 30px solid transparent;
-            border-right: 30px solid transparent;
-            border-bottom: 60px solid #FFC65D;
-            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.3));
-            animation: float 3s ease-in-out infinite;
-        }
-
-        .object-pokemon {
-            width: 80px;
-            height: 80px;
-            background: #FFD700;
-            border-radius: 50%;
-            position: relative;
-            border: 2px solid #fff;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            animation: float 3s ease-in-out infinite;
-        }
-
-        .object-pokemon::before {
-            content: '⚡';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 40px;
-        }
-
-        .object-pokemon::after {
-            content: '';
-            position: absolute;
-            top: -15px;
-            left: -10px;
-            width: 0;
-            height: 0;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-bottom: 20px solid #FFD700;
-            transform: rotate(-20deg);
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-10px) rotate(2deg); }
-        }
-
-        .placed-object {
-            animation: placeAnimation 0.5s ease-out;
-        }
-
-        @keyframes placeAnimation {
-            0% { transform: scale(0) rotate(0deg); opacity: 0; }
-            50% { transform: scale(1.2) rotate(180deg); opacity: 0.8; }
-            100% { transform: scale(1) rotate(360deg); opacity: 1; }
+        
+        @keyframes catchEffect {
+            0% { 
+                transform: scale(0) rotate(0deg); 
+                opacity: 1; 
+                border-color: #FFD700;
+            }
+            100% { 
+                transform: scale(3) rotate(360deg); 
+                opacity: 0; 
+                border-color: #FF6B6B;
+            }
         }
     </style>
 </head>
 <body>
     <div id="permissionDialog">
         <div class="dialog-content">
-            <h2>📷 Acceso a la Cámara</h2>
-            <p>Esta aplicación funciona sin WebGL y es compatible con todos los navegadores.</p>
-            <p>Haz clic en "Permitir" cuando tu navegador solicite acceso a la cámara.</p>
-            <button class="dialog-btn" onclick="requestCamera()">🚀 Iniciar AR</button>
+            <h2>🎮 AR Pokémon Experience</h2>
+            <p>¡Experimenta realidad aumentada con objetos 3D!</p>
+            <p>🔹 Detección automática de superficies</p>
+            <p>🔹 Objetos 3D realistas</p>
+            <p>🔹 Efectos visuales avanzados</p>
+            <button class="dialog-btn" onclick="requestCamera()">🚀 Iniciar Aventura AR</button>
         </div>
     </div>
 
     <div id="container" style="display: none;">
         <video id="video" autoplay muted playsinline></video>
-        <canvas id="overlay"></canvas>
+        <div id="threejs-container"></div>
         
         <div id="ui">
-            <h3>🎯 AR Compatible</h3>
-            <p><strong>Funciona sin WebGL:</strong></p>
-            <ul>
-                <li>Compatible con todos los navegadores</li>
-                <li>Mueve la cámara lentamente</li>
-                <li>Busca superficies planas</li>
-                <li>Toca "Colocar" cuando veas puntos verdes</li>
-            </ul>
-            <p><small>Estado: <span id="status">Iniciando...</span></small></p>
+            <h3>🎯 AR Pokémon Hunter</h3>
+            <p><strong>Estado:</strong> <span id="status">Iniciando...</span></p>
+            <p><strong>Superficies:</strong> <span id="surfaceCount">0</span></p>
+            <p><strong>Pokémon:</strong> <span id="pokemonCount">0</span></p>
+            <div style="margin-top: 10px; font-size: 12px; opacity: 0.8;">
+                🟢 Mueve la cámara lentamente<br>
+                🎯 Apunta al centro para capturar
+            </div>
         </div>
         
         <div id="crosshair"></div>
         
         <div id="instructions">
-            <h3>📱 Mueve tu dispositivo</h3>
-            <p>Apunta la cámara hacia superficies como:</p>
+            <h3>📱 Busca Pokémon Salvajes</h3>
+            <p>Apunta la cámara hacia:</p>
             <ul style="text-align: left;">
-                <li>Mesa o escritorio</li>
-                <li>Suelo</li>
-                <li>Libros o revistas</li>
-                <li>Cualquier superficie plana</li>
+                <li>🏠 Superficies planas (mesas, suelo)</li>
+                <li>📚 Libros o revistas</li>
+                <li>🌿 Césped o áreas abiertas</li>
+                <li>🎯 Cualquier superficie estable</li>
             </ul>
-            <p><small>Los puntos verdes indican superficies detectadas</small></p>
+            <p><small>Los puntos azules indican dónde pueden aparecer Pokémon</small></p>
         </div>
         
         <div id="controls">
-            <button class="control-btn active" onclick="changeModel('cube')">🎲 Cubo</button>
-            <button class="control-btn" onclick="changeModel('sphere')">⚽ Esfera</button>
-            <button class="control-btn" onclick="changeModel('pyramid')">🔺 Pirámide</button>
-            <button class="control-btn" onclick="changeModel('pokemon')">⚡ Pokémon</button>
-            <button id="placeBtn" class="control-btn" onclick="placeObject()">📍 Colocar Objeto</button>
-            <button class="control-btn" onclick="clearObjects()">🗑️ Limpiar</button>
+            <button class="control-btn active" onclick="selectPokemon('pikachu')">⚡ Pikachu</button>
+            <button class="control-btn" onclick="selectPokemon('pokeball')">⚪ Pokéball</button>
+            <button class="control-btn" onclick="selectPokemon('charmander')">🔥 Charmander</button>
+            <button class="control-btn" onclick="selectPokemon('squirtle')">💧 Squirtle</button>
+            <button id="catchBtn" class="control-btn" onclick="catchPokemon()">🎯 ¡Capturar!</button>
+            <button class="control-btn" onclick="clearAll()">🗑️ Limpiar</button>
         </div>
     </div>
 
     <script>
         // Variables globales
-        let video, overlay, ctx;
-        let currentModel = 'cube';
+        let video, scene, camera, renderer;
+        let currentPokemon = 'pikachu';
         let surfacePoints = [];
-        let isTracking = false;
         let placedObjects = [];
         let isInitialized = false;
-        let objectCounter = 0;
+        let pokemonCount = 0;
+        let animationId;
+        
+        // Configuración Three.js
+        function initThreeJS() {
+            const container = document.getElementById('threejs-container');
+            
+            // Crear escena
+            scene = new THREE.Scene();
+            
+            // Configurar cámara
+            camera = new THREE.PerspectiveCamera(
+                75, 
+                window.innerWidth / window.innerHeight, 
+                0.1, 
+                1000
+            );
+            camera.position.z = 5;
+            
+            // Crear renderer
+            renderer = new THREE.WebGLRenderer({ 
+                alpha: true, 
+                antialias: true 
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            
+            container.appendChild(renderer.domElement);
+            
+            // Añadir luces
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 5);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            // Iniciar loop de renderizado
+            animate();
+        }
+        
+        // Crear geometrías 3D para diferentes Pokémon
+        function createPokemon3D(type, position) {
+            let mesh;
+            
+            switch(type) {
+                case 'pikachu':
+                    // Cuerpo de Pikachu
+                    const pikachuGroup = new THREE.Group();
+                    
+                    // Cuerpo principal
+                    const bodyGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+                    const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                        color: 0xFFD700,
+                        shininess: 30
+                    });
+                    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                    body.castShadow = true;
+                    pikachuGroup.add(body);
+                    
+                    // Orejas
+                    const earGeometry = new THREE.ConeGeometry(0.2, 0.6, 8);
+                    const earMaterial = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
+                    
+                    const leftEar = new THREE.Mesh(earGeometry, earMaterial);
+                    leftEar.position.set(-0.4, 0.8, 0);
+                    leftEar.rotation.z = -0.3;
+                    pikachuGroup.add(leftEar);
+                    
+                    const rightEar = new THREE.Mesh(earGeometry, earMaterial);
+                    rightEar.position.set(0.4, 0.8, 0);
+                    rightEar.rotation.z = 0.3;
+                    pikachuGroup.add(rightEar);
+                    
+                    // Puntas negras de las orejas
+                    const tipGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+                    const tipMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
+                    
+                    const leftTip = new THREE.Mesh(tipGeometry, tipMaterial);
+                    leftTip.position.set(-0.5, 1.2, 0);
+                    pikachuGroup.add(leftTip);
+                    
+                    const rightTip = new THREE.Mesh(tipGeometry, tipMaterial);
+                    rightTip.position.set(0.5, 1.2, 0);
+                    pikachuGroup.add(rightTip);
+                    
+                    // Mejillas rojas
+                    const cheekGeometry = new THREE.CircleGeometry(0.15, 8);
+                    const cheekMaterial = new THREE.MeshPhongMaterial({ 
+                        color: 0xFF6B6B,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    
+                    const leftCheek = new THREE.Mesh(cheekGeometry, cheekMaterial);
+                    leftCheek.position.set(-0.6, 0.2, 0.7);
+                    pikachuGroup.add(leftCheek);
+                    
+                    const rightCheek = new THREE.Mesh(cheekGeometry, cheekMaterial);
+                    rightCheek.position.set(0.6, 0.2, 0.7);
+                    pikachuGroup.add(rightCheek);
+                    
+                    mesh = pikachuGroup;
+                    break;
+                    
+                case 'pokeball':
+                    const pokeballGroup = new THREE.Group();
+                    
+                    // Mitad superior (roja)
+                    const topGeometry = new THREE.SphereGeometry(0.6, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
+                    const topMaterial = new THREE.MeshPhongMaterial({ color: 0xFF4444 });
+                    const topHalf = new THREE.Mesh(topGeometry, topMaterial);
+                    topHalf.castShadow = true;
+                    pokeballGroup.add(topHalf);
+                    
+                    // Mitad inferior (blanca)
+                    const bottomGeometry = new THREE.SphereGeometry(0.6, 16, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5);
+                    const bottomMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+                    const bottomHalf = new THREE.Mesh(bottomGeometry, bottomMaterial);
+                    bottomHalf.castShadow = true;
+                    pokeballGroup.add(bottomHalf);
+                    
+                    // Banda central
+                    const bandGeometry = new THREE.CylinderGeometry(0.62, 0.62, 0.1, 16);
+                    const bandMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+                    const band = new THREE.Mesh(bandGeometry, bandMaterial);
+                    band.rotation.x = Math.PI / 2;
+                    pokeballGroup.add(band);
+                    
+                    // Botón central
+                    const buttonGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+                    const buttonMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+                    const button = new THREE.Mesh(buttonGeometry, buttonMaterial);
+                    button.position.z = 0.62;
+                    pokeballGroup.add(button);
+                    
+                    mesh = pokeballGroup;
+                    break;
+                    
+                case 'charmander':
+                    const charmanderGroup = new THREE.Group();
+                    
+                    // Cuerpo
+                    const charBodyGeometry = new THREE.SphereGeometry(0.7, 16, 16);
+                    const charBodyMaterial = new THREE.MeshPhongMaterial({ color: 0xFF8C42 });
+                    const charBody = new THREE.Mesh(charBodyGeometry, charBodyMaterial);
+                    charBody.castShadow = true;
+                    charmanderGroup.add(charBody);
+                    
+                    // Cola con fuego
+                    const tailGeometry = new THREE.ConeGeometry(0.15, 1.2, 8);
+                    const tailMaterial = new THREE.MeshPhongMaterial({ color: 0xFF8C42 });
+                    const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+                    tail.position.set(0.8, 0.2, -0.5);
+                    tail.rotation.z = -0.8;
+                    charmanderGroup.add(tail);
+                    
+                    // Llama de la cola
+                    const flameGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+                    const flameMaterial = new THREE.MeshPhongMaterial({ 
+                        color: 0xFF4444,
+                        emissive: 0xFF2222,
+                        emissiveIntensity: 0.3
+                    });
+                    const flame = new THREE.Mesh(flameGeometry, flameMaterial);
+                    flame.position.set(1.3, 0.8, -0.5);
+                    charmanderGroup.add(flame);
+                    
+                    mesh = charmanderGroup;
+                    break;
+                    
+                case 'squirtle':
+                    const squirtleGroup = new THREE.Group();
+                    
+                    // Caparazón
+                    const shellGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+                    const shellMaterial = new THREE.MeshPhongMaterial({ color: 0x4A90E2 });
+                    const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+                    shell.castShadow = true;
+                    squirtleGroup.add(shell);
+                    
+                    // Cabeza
+                    const headGeometry = new THREE.SphereGeometry(0.4, 12, 12);
+                    const headMaterial = new THREE.MeshPhongMaterial({ color: 0x87CEEB });
+                    const head = new THREE.Mesh(headGeometry, headMaterial);
+                    head.position.set(0, 0.2, 0.9);
+                    squirtleGroup.add(head);
+                    
+                    // Patas
+                    const legGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+                    const legMaterial = new THREE.MeshPhongMaterial({ color: 0x87CEEB });
+                    
+                    const positions = [
+                        [-0.6, -0.8, 0.3], [0.6, -0.8, 0.3],
+                        [-0.4, -0.8, -0.6], [0.4, -0.8, -0.6]
+                    ];
+                    
+                    positions.forEach(pos => {
+                        const leg = new THREE.Mesh(legGeometry, legMaterial);
+                        leg.position.set(...pos);
+                        squirtleGroup.add(leg);
+                    });
+                    
+                    mesh = squirtleGroup;
+                    break;
+                    
+                default:
+                    // Pokémon por defecto
+                    const defaultGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+                    const defaultMaterial = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
+                    mesh = new THREE.Mesh(defaultGeometry, defaultMaterial);
+                    mesh.castShadow = true;
+            }
+            
+            // Posicionar el objeto
+            if (position) {
+                mesh.position.copy(position);
+            }
+            
+            // Añadir animación de flotación
+            mesh.userData = {
+                originalY: mesh.position.y,
+                time: 0,
+                floatSpeed: 0.02 + Math.random() * 0.01,
+                floatAmount: 0.1 + Math.random() * 0.05
+            };
+            
+            return mesh;
+        }
         
         // Solicitar permiso de cámara
         async function requestCamera() {
@@ -346,7 +560,7 @@
                 alert('Error al acceder a la cámara. Por favor, recarga la página y permite el acceso.');
             }
         }
-
+        
         // Inicializar la aplicación
         async function init() {
             if (isInitialized) return;
@@ -354,14 +568,11 @@
             try {
                 updateStatus('Iniciando cámara...');
                 
-                // Configurar elementos
+                // Configurar video
                 video = document.getElementById('video');
-                overlay = document.getElementById('overlay');
-                ctx = overlay.getContext('2d');
                 
-                // Configurar canvas overlay
-                overlay.width = window.innerWidth;
-                overlay.height = window.innerHeight;
+                // Inicializar Three.js
+                initThreeJS();
                 
                 // Solicitar acceso a la cámara
                 const constraints = {
@@ -378,14 +589,13 @@
                 
                 video.srcObject = stream;
                 
-                // Esperar a que el video esté listo
                 video.onloadedmetadata = () => {
                     video.play().then(() => {
-                        updateStatus('✅ Cámara iniciada - Busca superficies');
+                        updateStatus('✅ Cámara iniciada - Detectando superficies');
                         document.getElementById('instructions').style.display = 'block';
                         
                         // Iniciar detección de superficies
-                        startSurfaceDetection();
+                        startAdvancedSurfaceDetection();
                         
                         isInitialized = true;
                     }).catch(error => {
@@ -398,7 +608,6 @@
                 console.error('Error en init:', error);
                 updateStatus('❌ Error al acceder a la cámara');
                 
-                // Mostrar mensaje de error más detallado
                 if (error.name === 'NotAllowedError') {
                     alert('Acceso a la cámara denegado. Por favor, permite el acceso y recarga la página.');
                 } else if (error.name === 'NotFoundError') {
@@ -409,17 +618,17 @@
             }
         }
         
-        // Detección de superficies mejorada
-        function startSurfaceDetection() {
+        // Detección avanzada de superficies
+        function startAdvancedSurfaceDetection() {
             setInterval(() => {
                 if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
-                    detectSurfaces();
+                    detectAdvancedSurfaces();
                 }
-            }, 400);
+            }, 500);
         }
         
-        // Detectar superficies usando análisis de imagen
-        function detectSurfaces() {
+        // Detectar superficies con algoritmo mejorado
+        function detectAdvancedSurfaces() {
             if (!video || !video.videoWidth || !video.videoHeight) return;
             
             // Limpiar puntos anteriores
@@ -430,8 +639,8 @@
                 // Crear canvas temporal para análisis
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = Math.min(video.videoWidth, 160);
-                tempCanvas.height = Math.min(video.videoHeight, 120);
+                tempCanvas.width = Math.min(video.videoWidth, 200);
+                tempCanvas.height = Math.min(video.videoHeight, 150);
                 
                 // Dibujar video en canvas temporal
                 tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
@@ -440,114 +649,161 @@
                 const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
                 const data = imageData.data;
                 
-                // Análisis de superficies basado en gradientes
-                const gridSize = 15;
-                const threshold = 25;
+                // Análisis mejorado de superficies
+                const gridSize = 20;
+                const threshold = 30;
                 
                 for (let y = gridSize; y < tempCanvas.height - gridSize; y += gridSize) {
                     for (let x = gridSize; x < tempCanvas.width - gridSize; x += gridSize) {
-                        // Calcular gradiente en la región
-                        let gradient = calculateGradient(data, x, y, gridSize, tempCanvas.width);
+                        // Calcular múltiples métricas
+                        const gradient = calculateGradient(data, x, y, gridSize, tempCanvas.width);
+                        const contrast = calculateContrast(data, x, y, gridSize, tempCanvas.width);
+                        const uniformity = calculateUniformity(data, x, y, gridSize, tempCanvas.width);
                         
-                        // Si el gradiente es bajo, podría ser una superficie plana
-                        if (gradient < threshold && Math.random() > 0.7) {
-                            // Convertir coordenadas de canvas a pantalla
+                        // Algoritmo de puntuación compuesto
+                        const surfaceScore = (
+                            (1 - gradient / 100) * 0.4 +
+                            (1 - contrast / 100) * 0.3 +
+                            uniformity * 0.3
+                        );
+                        
+                        // Si la puntuación es alta, es probablemente una superficie
+                        if (surfaceScore > 0.6 && Math.random() > 0.3) {
                             const screenX = (x / tempCanvas.width) * window.innerWidth;
                             const screenY = (y / tempCanvas.height) * window.innerHeight;
                             
                             surfacePoints.push({ 
                                 x: screenX, 
                                 y: screenY, 
-                                confidence: 1 - (gradient / threshold),
-                                time: Date.now()
+                                confidence: surfaceScore,
+                                time: Date.now(),
+                                gradient: gradient,
+                                contrast: contrast,
+                                uniformity: uniformity
                             });
-                            showSurfaceIndicator(screenX, screenY);
+                            
+                            showAdvancedSurfaceIndicator(screenX, screenY, surfaceScore);
                         }
                     }
                 }
                 
-                // Añadir puntos simulados si no se detectan suficientes
-                if (surfacePoints.length < 2) {
-                    addSimulatedSurfaces();
+                // Añadir puntos simulados si no hay suficientes
+                if (surfacePoints.length < 3) {
+                    addEnhancedSimulatedSurfaces();
                 }
+                
+                // Spawning automático de Pokémon
+                if (surfacePoints.length > 0 && Math.random() > 0.95) {
+                    autoSpawnPokemon();
+                }
+                
+                updateSurfaceCount(surfacePoints.length);
                 
                 if (surfacePoints.length > 0) {
                     updateStatus(`🟢 ${surfacePoints.length} superficie(s) detectada(s)`);
                     document.getElementById('instructions').style.display = 'none';
-                    isTracking = true;
                 } else {
                     updateStatus('🔍 Buscando superficies...');
                     if (placedObjects.length === 0) {
                         document.getElementById('instructions').style.display = 'block';
                     }
-                    isTracking = false;
                 }
                 
             } catch (error) {
                 console.error('Error en detección:', error);
-                addSimulatedSurfaces();
+                addEnhancedSimulatedSurfaces();
             }
         }
         
-        // Calcular gradiente para detectar bordes
+        // Calcular contraste (continuación)
+        function calculateContrast(data, centerX, centerY, size, width) {
+            const halfSize = Math.floor(size / 2);
+            let min = 255, max = 0;
+            
+            for (let dy = -halfSize; dy < halfSize; dy++) {
+                for (let dx = -halfSize; dx < halfSize; dx++) {
+                    const x = centerX + dx;
+                    const y = centerY + dy;
+                    if (x >= 0 && x < width && y >= 0) {
+                        const idx = (y * width + x) * 4;
+                        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                        min = Math.min(min, brightness);
+                        max = Math.max(max, brightness);
+                    }
+                }
+            }
+            return max - min;
+        }
+        
+        // Calcular gradiente
         function calculateGradient(data, centerX, centerY, size, width) {
             const halfSize = Math.floor(size / 2);
-            let totalGradient = 0;
+            let gradientSum = 0;
             let count = 0;
             
-            for (let dy = -halfSize + 1; dy < halfSize; dy++) {
-                for (let dx = -halfSize + 1; dx < halfSize; dx++) {
-                    const x1 = centerX + dx;
-                    const y1 = centerY + dy;
-                    const x2 = x1 + 1;
-                    const y2 = y1 + 1;
-                    
-                    const index1 = (y1 * width + x1) * 4;
-                    const index2 = (y2 * width + x2) * 4;
-                    
-                    if (index1 >= 0 && index2 < data.length - 3) {
-                        // Calcular diferencia de luminancia
-                        const lum1 = data[index1] * 0.299 + data[index1 + 1] * 0.587 + data[index1 + 2] * 0.114;
-                        const lum2 = data[index2] * 0.299 + data[index2 + 1] * 0.587 + data[index2 + 2] * 0.114;
+            for (let dy = -halfSize; dy < halfSize - 1; dy++) {
+                for (let dx = -halfSize; dx < halfSize - 1; dx++) {
+                    const x = centerX + dx;
+                    const y = centerY + dy;
+                    if (x >= 0 && x < width - 1 && y >= 0) {
+                        const idx1 = (y * width + x) * 4;
+                        const idx2 = (y * width + (x + 1)) * 4;
+                        const idx3 = ((y + 1) * width + x) * 4;
                         
-                        totalGradient += Math.abs(lum1 - lum2);
+                        const b1 = (data[idx1] + data[idx1 + 1] + data[idx1 + 2]) / 3;
+                        const b2 = (data[idx2] + data[idx2 + 1] + data[idx2 + 2]) / 3;
+                        const b3 = (data[idx3] + data[idx3 + 1] + data[idx3 + 2]) / 3;
+                        
+                        const gradX = Math.abs(b2 - b1);
+                        const gradY = Math.abs(b3 - b1);
+                        gradientSum += Math.sqrt(gradX * gradX + gradY * gradY);
                         count++;
                     }
                 }
             }
-            
-            return count > 0 ? totalGradient / count : 100;
+            return count > 0 ? gradientSum / count : 0;
         }
         
-        // Añadir superficies simuladas
-        function addSimulatedSurfaces() {
-            for (let i = 0; i < 3; i++) {
-                if (Math.random() > 0.4) {
-                    const x = 100 + Math.random() * (window.innerWidth - 200);
-                    const y = window.innerHeight * 0.4 + Math.random() * window.innerHeight * 0.3;
-                    
-                    surfacePoints.push({ 
-                        x, 
-                        y, 
-                        confidence: 0.7 + Math.random() * 0.3,
-                        time: Date.now()
-                    });
-                    showSurfaceIndicator(x, y);
+        // Calcular uniformidad
+        function calculateUniformity(data, centerX, centerY, size, width) {
+            const halfSize = Math.floor(size / 2);
+            let values = [];
+            
+            for (let dy = -halfSize; dy < halfSize; dy++) {
+                for (let dx = -halfSize; dx < halfSize; dx++) {
+                    const x = centerX + dx;
+                    const y = centerY + dy;
+                    if (x >= 0 && x < width && y >= 0) {
+                        const idx = (y * width + x) * 4;
+                        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                        values.push(brightness);
+                    }
                 }
             }
+            
+            if (values.length === 0) return 0;
+            
+            const mean = values.reduce((a, b) => a + b) / values.length;
+            const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+            const stdDev = Math.sqrt(variance);
+            
+            return Math.max(0, 1 - stdDev / 50); // Normalizar
         }
         
-        // Mostrar indicador de superficie
-        function showSurfaceIndicator(x, y) {
+        // Mostrar indicador avanzado de superficie
+        function showAdvancedSurfaceIndicator(x, y, confidence) {
             const indicator = document.createElement('div');
-            indicator.className = 'surface-indicator';
-            indicator.style.left = (x - 10) + 'px';
-            indicator.style.top = (y - 10) + 'px';
-            document.getElementById('container').appendChild(indicator);
+            indicator.className = 'surface-point';
+            indicator.style.left = (x - 4) + 'px';
+            indicator.style.top = (y - 4) + 'px';
+            indicator.style.background = `hsl(${180 + confidence * 60}, 70%, 60%)`;
+            indicator.style.boxShadow = `0 0 ${10 + confidence * 10}px hsl(${180 + confidence * 60}, 70%, 60%)`;
+            
+            document.body.appendChild(indicator);
             
             // Remover después de 2 segundos
             setTimeout(() => {
-                if (indicator && indicator.parentNode) {
+                if (indicator.parentNode) {
                     indicator.parentNode.removeChild(indicator);
                 }
             }, 2000);
@@ -555,7 +811,7 @@
         
         // Limpiar indicadores de superficie
         function clearSurfaceIndicators() {
-            const indicators = document.querySelectorAll('.surface-indicator');
+            const indicators = document.querySelectorAll('.surface-point');
             indicators.forEach(indicator => {
                 if (indicator.parentNode) {
                     indicator.parentNode.removeChild(indicator);
@@ -563,150 +819,349 @@
             });
         }
         
-        // Crear objeto virtual 2D
-        function createVirtualObject(type, x, y) {
-            const object = document.createElement('div');
-            object.className = `virtual-object object-${type} placed-object`;
-            object.style.left = (x - 30) + 'px';
-            object.style.top = (y - 30) + 'px';
+        // Añadir superficies simuladas mejoradas
+        function addEnhancedSimulatedSurfaces() {
+            const patterns = [
+                // Patrón en cuadrícula
+                { x: 0.3, y: 0.4 }, { x: 0.7, y: 0.4 },
+                { x: 0.3, y: 0.6 }, { x: 0.7, y: 0.6 },
+                // Patrón en L
+                { x: 0.2, y: 0.3 }, { x: 0.2, y: 0.7 }, { x: 0.5, y: 0.7 },
+                // Patrón diagonal
+                { x: 0.4, y: 0.2 }, { x: 0.6, y: 0.4 }, { x: 0.8, y: 0.6 }
+            ];
             
-            // Añadir datos del objeto
-            object.dataset.type = type;
-            object.dataset.id = 'obj_' + (++objectCounter);
-            object.dataset.createdAt = Date.now();
-            
-            // Añadir efecto de rotación aleatoria
-            const randomRotation = Math.random() * 360;
-            object.style.transform = `rotate(${randomRotation}deg)`;
-            
-            return object;
+            patterns.forEach((pattern, index) => {
+                const x = pattern.x * window.innerWidth;
+                const y = pattern.y * window.innerHeight;
+                const confidence = 0.7 + Math.random() * 0.3;
+                
+                surfacePoints.push({
+                    x: x,
+                    y: y,
+                    confidence: confidence,
+                    time: Date.now(),
+                    simulated: true,
+                    pattern: index
+                });
+                
+                showAdvancedSurfaceIndicator(x, y, confidence);
+            });
         }
         
-        // Colocar objeto en superficie
-        function placeObject() {
-            if (!isTracking || surfacePoints.length === 0) {
+        // Spawn automático de Pokémon
+        function autoSpawnPokemon() {
+            if (surfacePoints.length === 0) return;
+            
+            const randomSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
+            const pokemonTypes = ['pikachu', 'pokeball', 'charmander', 'squirtle'];
+            const randomType = pokemonTypes[Math.floor(Math.random() * pokemonTypes.length)];
+            
+            placePokemonAt(randomSurface.x, randomSurface.y, randomType);
+            
+            // Mostrar indicador de aparición
+            showPokemonSpawnEffect(randomSurface.x, randomSurface.y, randomType);
+        }
+        
+        // Mostrar efecto de aparición de Pokémon
+        function showPokemonSpawnEffect(x, y, type) {
+            const effect = document.createElement('div');
+            effect.className = 'pokemon-indicator';
+            effect.innerHTML = getPokemonEmoji(type);
+            effect.style.left = (x - 12) + 'px';
+            effect.style.top = (y - 12) + 'px';
+            
+            document.body.appendChild(effect);
+            
+            setTimeout(() => {
+                if (effect.parentNode) {
+                    effect.parentNode.removeChild(effect);
+                }
+            }, 3000);
+        }
+        
+        // Obtener emoji de Pokémon
+        function getPokemonEmoji(type) {
+            const emojis = {
+                'pikachu': '⚡',
+                'pokeball': '⚪',
+                'charmander': '🔥',
+                'squirtle': '💧'
+            };
+            return emojis[type] || '⚡';
+        }
+        
+        // Colocar Pokémon en posición específica
+        function placePokemonAt(screenX, screenY, type) {
+            // Convertir coordenadas de pantalla a coordenadas 3D
+            const x = (screenX / window.innerWidth) * 10 - 5;
+            const y = -(screenY / window.innerHeight) * 6 + 3;
+            const z = -2 - Math.random() * 3;
+            
+            const position = new THREE.Vector3(x, y, z);
+            const pokemon = createPokemon3D(type || currentPokemon, position);
+            
+            scene.add(pokemon);
+            placedObjects.push(pokemon);
+            
+            pokemonCount++;
+            updatePokemonCount(pokemonCount);
+            
+            // Efecto de aparición
+            pokemon.scale.set(0, 0, 0);
+            const targetScale = 1;
+            
+            function scaleUp() {
+                if (pokemon.scale.x < targetScale) {
+                    pokemon.scale.x += 0.05;
+                    pokemon.scale.y += 0.05;
+                    pokemon.scale.z += 0.05;
+                    requestAnimationFrame(scaleUp);
+                }
+            }
+            scaleUp();
+        }
+        
+        // Seleccionar tipo de Pokémon
+        function selectPokemon(type) {
+            currentPokemon = type;
+            
+            // Actualizar botones
+            document.querySelectorAll('.control-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            event.target.classList.add('active');
+            updateStatus(`🎯 Seleccionado: ${type.charAt(0).toUpperCase() + type.slice(1)}`);
+        }
+        
+        // Capturar Pokémon
+        function catchPokemon() {
+            if (surfacePoints.length === 0) {
                 updateStatus('❌ No hay superficies detectadas');
                 return;
             }
             
-            // Encontrar el mejor punto para colocar el objeto
+            // Encontrar superficie más cercana al centro
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
+            let closestSurface = null;
+            let minDistance = Infinity;
             
-            let bestPoint = surfacePoints[0];
-            let bestScore = 0;
-            
-            surfacePoints.forEach(point => {
+            surfacePoints.forEach(surface => {
                 const distance = Math.sqrt(
-                    Math.pow(point.x - centerX, 2) + 
-                    Math.pow(point.y - centerY, 2)
+                    Math.pow(surface.x - centerX, 2) + 
+                    Math.pow(surface.y - centerY, 2)
                 );
-                const normalizedDistance = 1 - (distance / Math.sqrt(centerX * centerX + centerY * centerY));
-                const ageBonus = 1 - Math.min((Date.now() - point.time) / 5000, 0.5); // Prefiere puntos más recientes
-                const score = (point.confidence || 0.5) * 0.4 + normalizedDistance * 0.4 + ageBonus * 0.2;
-                
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestPoint = point;
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestSurface = surface;
                 }
             });
             
-            // Crear y colocar el objeto
-            const virtualObject = createVirtualObject(currentModel, bestPoint.x, bestPoint.y);
-            document.getElementById('container').appendChild(virtualObject);
-            placedObjects.push(virtualObject);
-            
-            updateStatus(`✅ ${getModelName(currentModel)} colocado!`);
-            
-            // Efecto sonoro simulado con vibración (si está disponible)
-            if (navigator.vibrate) {
-                navigator.vibrate(100);
+            if (closestSurface && minDistance < 100) {
+                placePokemonAt(closestSurface.x, closestSurface.y, currentPokemon);
+                showCatchEffect(closestSurface.x, closestSurface.y);
+                updateStatus(`✅ ¡${currentPokemon.charAt(0).toUpperCase() + currentPokemon.slice(1)} capturado!`);
+            } else {
+                // Colocar en el centro si no hay superficie cercana
+                placePokemonAt(centerX, centerY, currentPokemon);
+                showCatchEffect(centerX, centerY);
+                updateStatus(`✅ ¡${currentPokemon.charAt(0).toUpperCase() + currentPokemon.slice(1)} apareció!`);
             }
         }
         
-        // Cambiar modelo actual
-        function changeModel(modelType) {
-            document.querySelectorAll('.control-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
+        // Mostrar efecto de captura
+        function showCatchEffect(x, y) {
+            const effect = document.createElement('div');
+            effect.className = 'catch-effect';
+            effect.style.left = (x - 50) + 'px';
+            effect.style.top = (y - 50) + 'px';
             
-            currentModel = modelType;
-            updateStatus(`Modelo seleccionado: ${getModelName(modelType)}`);
+            document.body.appendChild(effect);
+            
+            setTimeout(() => {
+                if (effect.parentNode) {
+                    effect.parentNode.removeChild(effect);
+                }
+            }, 1000);
         }
         
         // Limpiar todos los objetos
-        function clearObjects() {
+        function clearAll() {
+            // Remover objetos de la escena
             placedObjects.forEach(obj => {
-                if (obj.parentNode) {
-                    obj.parentNode.removeChild(obj);
-                }
+                scene.remove(obj);
             });
+            
             placedObjects = [];
-            objectCounter = 0;
-            updateStatus('🗑️ Objetos eliminados');
-        }
-        
-        // Obtener nombre del modelo
-        function getModelName(type) {
-            const names = {
-                'cube': 'Cubo Mágico',
-                'sphere': 'Esfera Brillante',
-                'pyramid': 'Pirámide Dorada',
-                'pokemon': 'Pikachu'
-            };
-            return names[type] || type;
+            pokemonCount = 0;
+            
+            updatePokemonCount(0);
+            updateStatus('🗑️ Escena limpiada');
         }
         
         // Actualizar estado
         function updateStatus(message) {
-            const statusEl = document.getElementById('status');
-            if (statusEl) {
-                statusEl.textContent = message;
-            }
+            document.getElementById('status').textContent = message;
         }
         
-        // Manejar redimensionado
+        // Actualizar contador de superficies
+        function updateSurfaceCount(count) {
+            document.getElementById('surfaceCount').textContent = count;
+        }
+        
+        // Actualizar contador de Pokémon
+        function updatePokemonCount(count) {
+            document.getElementById('pokemonCount').textContent = count;
+        }
+        
+        // Loop de animación
+        function animate() {
+            animationId = requestAnimationFrame(animate);
+            
+            // Animar objetos colocados
+            placedObjects.forEach(obj => {
+                if (obj.userData) {
+                    obj.userData.time += obj.userData.floatSpeed;
+                    obj.position.y = obj.userData.originalY + 
+                        Math.sin(obj.userData.time) * obj.userData.floatAmount;
+                    
+                    // Rotación suave
+                    obj.rotation.y += 0.01;
+                }
+            });
+            
+            // Renderizar escena
+            renderer.render(scene, camera);
+        }
+        
+        // Manejar redimensionamiento
         window.addEventListener('resize', () => {
-            if (overlay) {
-                overlay.width = window.innerWidth;
-                overlay.height = window.innerHeight;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Manejar orientación en móviles
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }, 100);
+        });
+        
+        // Controles táctiles
+        let touchStartX = 0;
+        let touchStartY = 0;
+        
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+        
+        document.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            
+            const deltaX = Math.abs(touchEndX - touchStartX);
+            const deltaY = Math.abs(touchEndY - touchStartY);
+            
+            // Si fue un tap rápido (no deslizamiento)
+            if (deltaX < 10 && deltaY < 10) {
+                // Colocar Pokémon donde se hizo tap
+                placePokemonAt(touchEndX, touchEndY, currentPokemon);
+                showCatchEffect(touchEndX, touchEndY);
             }
         });
         
-        // Verificar soporte de navegador
-        function checkBrowserSupport() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert('Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari más reciente.');
-                return false;
+        // Efectos de sonido simulados
+        function playSound(type) {
+            // Vibración en dispositivos móviles
+            if (navigator.vibrate) {
+                switch(type) {
+                    case 'catch':
+                        navigator.vibrate([100, 50, 100]);
+                        break;
+                    case 'spawn':
+                        navigator.vibrate(200);
+                        break;
+                }
             }
-            return true;
         }
         
-        // Inicializar cuando se carga la página
-        window.addEventListener('load', () => {
-            if (checkBrowserSupport()) {
-                updateStatus('Listo para iniciar');
-            }
-        });
-
-        // Añadir interactividad a objetos colocados
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('virtual-object')) {
-                // Efecto de click en objeto
-                e.target.style.animation = 'none';
-                setTimeout(() => {
-                    e.target.style.animation = 'float 3s ease-in-out infinite';
-                }, 10);
+        // Auto-inicialización mejorada
+        document.addEventListener('DOMContentLoaded', () => {
+            // Añadir eventos a botones
+            document.querySelectorAll('.control-btn').forEach(btn => {
+                btn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    btn.style.transform = 'scale(0.95)';
+                });
                 
-                // Cambiar color temporalmente
-                const originalFilter = e.target.style.filter;
-                e.target.style.filter = 'brightness(1.5) saturate(1.5)';
-                setTimeout(() => {
-                    e.target.style.filter = originalFilter;
-                }, 200);
-            }
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    btn.style.transform = 'scale(1)';
+                });
+            });
+            
+            // Precargar recursos
+            updateStatus('🎮 Listo para iniciar AR');
         });
+        
+        // Funciones de utilidad adicionales
+        function getRandomPosition() {
+            return {
+                x: Math.random() * window.innerWidth,
+                y: Math.random() * window.innerHeight
+            };
+        }
+        
+        function createParticleEffect(x, y, color = 0xFFD700) {
+            const particles = new THREE.Group();
+            
+            for (let i = 0; i < 20; i++) {
+                const geometry = new THREE.SphereGeometry(0.02, 4, 4);
+                const material = new THREE.MeshBasicMaterial({ color: color });
+                const particle = new THREE.Mesh(geometry, material);
+                
+                particle.position.set(
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2
+                );
+                
+                particles.add(particle);
+            }
+            
+            return particles;
+        }
+        
+        // Configuraciones avanzadas
+        const CONFIG = {
+            DETECTION_INTERVAL: 500,
+            SPAWN_PROBABILITY: 0.02,
+            MAX_POKEMON: 20,
+            SURFACE_CONFIDENCE_THRESHOLD: 0.6,
+            CATCH_RADIUS: 100
+        };
+        
+        // Sistema de puntuación
+        let score = 0;
+        let combo = 0;
+        
+        function updateScore(points) {
+            score += points * (combo + 1);
+            combo++;
+            
+            setTimeout(() => {
+                combo = Math.max(0, combo - 1);
+            }, 5000);
+        }
+        
+        console.log('🎮 AR Pokémon System Loaded');
+        console.log('📱 Optimizado para dispositivos móviles');
+        console.log('🎯 Sistema de detección avanzado activado');
     </script>
 </body>
-</html>
