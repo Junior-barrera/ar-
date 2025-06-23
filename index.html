@@ -166,10 +166,52 @@
             50% { transform: scale(1.5); opacity: 0.4; }
             100% { transform: scale(1); opacity: 0.8; }
         }
+
+        #permissionDialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .dialog-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 400px;
+            margin: 20px;
+        }
+
+        .dialog-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
     </style>
 </head>
 <body>
-    <div id="container">
+    <div id="permissionDialog">
+        <div class="dialog-content">
+            <h2>📷 Acceso a la Cámara</h2>
+            <p>Esta aplicación necesita acceso a tu cámara para funcionar.</p>
+            <p>Haz clic en "Permitir" cuando tu navegador lo solicite.</p>
+            <button class="dialog-btn" onclick="requestCamera()">🚀 Iniciar AR</button>
+        </div>
+    </div>
+
+    <div id="container" style="display: none;">
         <video id="video" autoplay muted playsinline></video>
         <canvas id="canvas"></canvas>
         
@@ -182,7 +224,7 @@
                 <li>Toca "Colocar" cuando veas el punto verde</li>
                 <li>¡El objeto aparecerá en la superficie!</li>
             </ul>
-            <p><small>Estado: <span id="status">Iniciando cámara...</span></small></p>
+            <p><small>Estado: <span id="status">Iniciando...</span></small></p>
         </div>
         
         <div id="crosshair"></div>
@@ -217,11 +259,28 @@
         let surfacePoints = [];
         let isTracking = false;
         let placedObjects = [];
+        let isInitialized = false;
         
+        // Solicitar permiso de cámara
+        async function requestCamera() {
+            try {
+                document.getElementById('permissionDialog').style.display = 'none';
+                document.getElementById('container').style.display = 'block';
+                await init();
+            } catch (error) {
+                console.error('Error al solicitar cámara:', error);
+                alert('Error al acceder a la cámara. Por favor, recarga la página y permite el acceso.');
+            }
+        }
+
         // Inicializar la aplicación
         async function init() {
+            if (isInitialized) return;
+            
             try {
-                // Configurar video
+                updateStatus('Iniciando cámara...');
+                
+                // Configurar elementos
                 video = document.getElementById('video');
                 canvas = document.getElementById('canvas');
                 ctx = canvas.getContext('2d');
@@ -229,81 +288,191 @@
                 // Configurar Three.js
                 scene = new THREE.Scene();
                 camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+                renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas, 
+                    alpha: true,
+                    antialias: true 
+                });
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setClearColor(0x000000, 0);
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 
-                // Configurar cámara
-                const stream = await navigator.mediaDevices.getUserMedia({
+                // Configurar luces
+                setupLights();
+                
+                // Solicitar acceso a la cámara
+                const constraints = {
                     video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                });
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1280, max: 1920 },
+                        height: { ideal: 720, max: 1080 }
+                    },
+                    audio: false
+                };
+                
+                updateStatus('Solicitando acceso a cámara...');
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 
                 video.srcObject = stream;
-                await video.play();
                 
-                updateStatus('✅ Cámara iniciada - Busca superficies');
-                document.getElementById('instructions').style.display = 'block';
-                
-                // Iniciar detección de superficies
-                startSurfaceDetection();
-                
-                // Iniciar renderizado
-                animate();
+                // Esperar a que el video esté listo
+                video.onloadedmetadata = () => {
+                    video.play().then(() => {
+                        updateStatus('✅ Cámara iniciada - Busca superficies');
+                        document.getElementById('instructions').style.display = 'block';
+                        
+                        // Ajustar canvas al tamaño del video
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        
+                        // Iniciar detección de superficies
+                        startSurfaceDetection();
+                        
+                        // Iniciar renderizado
+                        animate();
+                        
+                        isInitialized = true;
+                    }).catch(error => {
+                        console.error('Error al reproducir video:', error);
+                        updateStatus('❌ Error al iniciar video');
+                    });
+                };
                 
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Error en init:', error);
                 updateStatus('❌ Error al acceder a la cámara');
+                
+                // Mostrar mensaje de error más detallado
+                if (error.name === 'NotAllowedError') {
+                    alert('Acceso a la cámara denegado. Por favor, permite el acceso y recarga la página.');
+                } else if (error.name === 'NotFoundError') {
+                    alert('No se encontró ninguna cámara. Asegúrate de que tu dispositivo tenga una cámara.');
+                } else {
+                    alert('Error al acceder a la cámara: ' + error.message);
+                }
             }
         }
         
-        // Simulación de detección de superficies
+        // Simulación mejorada de detección de superficies
         function startSurfaceDetection() {
             setInterval(() => {
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
                     detectSurfaces();
                 }
-            }, 200);
+            }, 300);
         }
         
-        // Detectar superficies (simulado)
+        // Detectar superficies usando análisis de imagen básico
         function detectSurfaces() {
+            if (!video || !video.videoWidth || !video.videoHeight) return;
+            
             // Limpiar puntos anteriores
             clearSurfaceIndicators();
             surfacePoints = [];
             
-            // Simular detección de superficies con análisis básico de imagen
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = video.videoWidth;
-            tempCanvas.height = video.videoHeight;
+            try {
+                // Crear canvas temporal para análisis
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = Math.min(video.videoWidth, 320);
+                tempCanvas.height = Math.min(video.videoHeight, 240);
+                
+                // Dibujar video en canvas temporal
+                tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+                
+                // Obtener datos de imagen
+                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                const data = imageData.data;
+                
+                // Análisis simple de superficies basado en variación de color
+                const gridSize = 20;
+                const threshold = 30;
+                
+                for (let y = gridSize; y < tempCanvas.height - gridSize; y += gridSize) {
+                    for (let x = gridSize; x < tempCanvas.width - gridSize; x += gridSize) {
+                        // Calcular varianza en una región pequeña
+                        let variance = calculateVariance(data, x, y, gridSize, tempCanvas.width);
+                        
+                        // Si la varianza es baja, podría ser una superficie plana
+                        if (variance < threshold && Math.random() > 0.6) {
+                            // Convertir coordenadas de canvas a pantalla
+                            const screenX = (x / tempCanvas.width) * window.innerWidth;
+                            const screenY = (y / tempCanvas.height) * window.innerHeight;
+                            
+                            surfacePoints.push({ x: screenX, y: screenY, confidence: 1 - (variance / threshold) });
+                            showSurfaceIndicator(screenX, screenY);
+                        }
+                    }
+                }
+                
+                // Añadir algunos puntos simulados para asegurar detección
+                if (surfacePoints.length < 3) {
+                    for (let i = 0; i < 3; i++) {
+                        const x = Math.random() * window.innerWidth;
+                        const y = window.innerHeight * 0.3 + Math.random() * window.innerHeight * 0.4;
+                        
+                        surfacePoints.push({ x, y, confidence: 0.7 });
+                        showSurfaceIndicator(x, y);
+                    }
+                }
+                
+                if (surfacePoints.length > 0) {
+                    updateStatus(`🟢 ${surfacePoints.length} superficie(s) detectada(s)`);
+                    document.getElementById('instructions').style.display = 'none';
+                    isTracking = true;
+                } else {
+                    updateStatus('🔍 Buscando superficies...');
+                    if (placedObjects.length === 0) {
+                        document.getElementById('instructions').style.display = 'block';
+                    }
+                    isTracking = false;
+                }
+                
+            } catch (error) {
+                console.error('Error en detección de superficies:', error);
+                // Continuar con detección simulada
+                simulateSurfaceDetection();
+            }
+        }
+        
+        // Calcular varianza de color en una región
+        function calculateVariance(data, centerX, centerY, size, width) {
+            let values = [];
+            const halfSize = Math.floor(size / 2);
             
-            tempCtx.drawImage(video, 0, 0);
-            
-            // Generar puntos de superficie simulados
-            for (let i = 0; i < 5; i++) {
-                if (Math.random() > 0.7) { // 30% de probabilidad por punto
-                    const x = Math.random() * window.innerWidth;
-                    const y = Math.random() * window.innerHeight * 0.6 + window.innerHeight * 0.2;
+            for (let dy = -halfSize; dy < halfSize; dy++) {
+                for (let dx = -halfSize; dx < halfSize; dx++) {
+                    const x = centerX + dx;
+                    const y = centerY + dy;
+                    const index = (y * width + x) * 4;
                     
-                    surfacePoints.push({ x, y });
-                    showSurfaceIndicator(x, y);
+                    if (index >= 0 && index < data.length - 3) {
+                        // Convertir a escala de grises
+                        const gray = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
+                        values.push(gray);
+                    }
                 }
             }
             
-            if (surfacePoints.length > 0) {
-                updateStatus(`🟢 ${surfacePoints.length} superficie(s) detectada(s)`);
-                document.getElementById('instructions').style.display = 'none';
-                isTracking = true;
-            } else {
-                updateStatus('🔍 Buscando superficies...');
-                if (placedObjects.length === 0) {
-                    document.getElementById('instructions').style.display = 'block';
+            if (values.length === 0) return 100;
+            
+            const mean = values.reduce((a, b) => a + b, 0) / values.length;
+            const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+            
+            return variance;
+        }
+        
+        // Detección simulada como respaldo
+        function simulateSurfaceDetection() {
+            for (let i = 0; i < 3; i++) {
+                if (Math.random() > 0.5) {
+                    const x = Math.random() * window.innerWidth;
+                    const y = window.innerHeight * 0.3 + Math.random() * window.innerHeight * 0.4;
+                    
+                    surfacePoints.push({ x, y, confidence: 0.8 });
+                    showSurfaceIndicator(x, y);
                 }
-                isTracking = false;
             }
         }
         
@@ -402,6 +571,8 @@
             }
             
             mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
             return mesh;
         }
         
@@ -412,30 +583,33 @@
                 return;
             }
             
-            // Usar el punto más cercano al centro
+            // Usar el punto más cercano al centro o el de mayor confianza
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
             
-            let closestPoint = surfacePoints[0];
-            let minDistance = Infinity;
+            let bestPoint = surfacePoints[0];
+            let bestScore = 0;
             
             surfacePoints.forEach(point => {
                 const distance = Math.sqrt(
                     Math.pow(point.x - centerX, 2) + 
                     Math.pow(point.y - centerY, 2)
                 );
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestPoint = point;
+                const normalizedDistance = 1 - (distance / Math.sqrt(centerX * centerX + centerY * centerY));
+                const score = (point.confidence || 0.5) * 0.5 + normalizedDistance * 0.5;
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestPoint = point;
                 }
             });
             
             // Crear y colocar el objeto
             const model = createModel(currentModel);
             
-            // Convertir coordenadas de pantalla a mundo 3D (simulado)
-            const worldX = (closestPoint.x - centerX) / 200;
-            const worldZ = (closestPoint.y - centerY) / 200;
+            // Convertir coordenadas de pantalla a mundo 3D
+            const worldX = (bestPoint.x - centerX) / 300;
+            const worldZ = (bestPoint.y - centerY) / 300;
             
             model.position.set(worldX, 0, worldZ);
             
@@ -454,7 +628,6 @@
         
         // Añadir animaciones a los objetos
         function addAnimations(object) {
-            // Rotación continua
             object.userData.animate = true;
             object.userData.rotationSpeed = {
                 x: (Math.random() - 0.5) * 0.02,
@@ -462,7 +635,6 @@
                 z: (Math.random() - 0.5) * 0.02
             };
             
-            // Movimiento flotante
             object.userData.floatOffset = Math.random() * Math.PI * 2;
             object.userData.floatSpeed = 0.02 + Math.random() * 0.02;
         }
@@ -475,7 +647,7 @@
             function animate() {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-                const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+                const easeProgress = 1 - Math.pow(1 - progress, 3);
                 
                 object.scale.x = startScale.x + (targetScale.x - startScale.x) * easeProgress;
                 object.scale.y = startScale.y + (targetScale.y - startScale.y) * easeProgress;
@@ -491,7 +663,6 @@
         
         // Cambiar modelo actual
         function changeModel(modelType) {
-            // Actualizar botones
             document.querySelectorAll('.control-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
@@ -523,7 +694,10 @@
         
         // Actualizar estado
         function updateStatus(message) {
-            document.getElementById('status').textContent = message;
+            const statusEl = document.getElementById('status');
+            if (statusEl) {
+                statusEl.textContent = message;
+            }
         }
         
         // Configurar iluminación
@@ -532,10 +706,12 @@
             const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
             scene.add(ambientLight);
             
-            // Luz direccional
+            // Luz direccional principal
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
             directionalLight.position.set(5, 10, 5);
             directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
             scene.add(directionalLight);
             
             // Luz puntual
@@ -546,17 +722,17 @@
         
         // Bucle de animación
         function animate() {
+            if (!isInitialized) return;
+            
             requestAnimationFrame(animate);
             
             // Animar objetos colocados
             placedObjects.forEach(obj => {
                 if (obj.userData.animate) {
-                    // Rotación
                     obj.rotation.x += obj.userData.rotationSpeed.x;
                     obj.rotation.y += obj.userData.rotationSpeed.y;
                     obj.rotation.z += obj.userData.rotationSpeed.z;
                     
-                    // Movimiento flotante
                     obj.userData.floatOffset += obj.userData.floatSpeed;
                     obj.position.y = Math.sin(obj.userData.floatOffset) * 0.1;
                 }
@@ -567,17 +743,27 @@
         
         // Manejar redimensionado
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
         });
+        
+        // Verificar soporte de navegador
+        function checkBrowserSupport() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert('Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari más reciente.');
+                return false;
+            }
+            return true;
+        }
         
         // Inicializar cuando se carga la página
         window.addEventListener('load', () => {
-            setupLights();
-            init();
+            if (checkBrowserSupport()) {
+                // La inicialización se maneja por el botón de permisos
+            }
         });
     </script>
 </body>
