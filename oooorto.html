@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Surface Scanner - Puntos Manuales</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            background: #000;
+            user-select: none;
+            touch-action: none;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+        
+        #threejs-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+        
+        #click-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            cursor: crosshair;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 280px;
+            pointer-events: none;
+            font-size: 14px;
+        }
+        
+        #ui h3 {
+            font-size: 16px;
+            margin: 5px 0 10px 0;
+        }
+        
+        .corner-point {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #00ff00;
+            border-radius: 50%;
+            background: rgba(0, 255, 0, 0.4);
+            z-index: 500;
+            pointer-events: none;
+            animation: cornerPulse 1.5s infinite;
+            box-shadow: 0 0 15px #00ff00;
+            transform: translate(-50%, -50%);
+        }
+        
+        .corner-point.confirmed {
+            border-color: #ff0080;
+            background: rgba(255, 0, 128, 0.4);
+            box-shadow: 0 0 15px #ff0080;
+            animation: confirmedPulse 1s infinite;
+        }
+        
+        .corner-point.selected {
+            border-color: #ffff00;
+            background: rgba(255, 255, 0, 0.4);
+            box-shadow: 0 0 20px #ffff00;
+            animation: selectedPulse 0.8s infinite;
+        }
+        
+        @keyframes cornerPulse {
+            0%, 100% { 
+                transform: translate(-50%, -50%) scale(1); 
+                opacity: 0.8; 
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.2); 
+                opacity: 1; 
+            }
+        }
+        
+        @keyframes confirmedPulse {
+            0%, 100% { 
+                transform: translate(-50%, -50%) scale(1) rotate(0deg); 
+                opacity: 0.9; 
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.1) rotate(180deg); 
+                opacity: 1; 
+            }
+        }
+        
+        @keyframes selectedPulse {
+            0%, 100% { 
+                transform: translate(-50%, -50%) scale(1); 
+                opacity: 1; 
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.3); 
+                opacity: 0.7; 
+            }
+        }
+        
+        .surface-outline {
+            position: absolute;
+            border: 2px solid #00ffff;
+            z-index: 400;
+            pointer-events: none;
+            background: rgba(0, 255, 255, 0.1);
+            border-radius: 6px;
+            animation: surfaceGlow 2s infinite;
+        }
+        
+        @keyframes surfaceGlow {
+            0%, 100% { 
+                box-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
+                border-color: #00ffff;
+            }
+            50% { 
+                box-shadow: 0 0 25px rgba(0, 255, 255, 0.9);
+                border-color: #00ff88;
+            }
+        }
+        
+        .corner-label {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        #crosshair {
+            position: absolute;
+            width: 25px;
+            height: 25px;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            z-index: 600;
+            pointer-events: none;
+            display: none;
+            transform: translate(-50%, -50%);
+        }
+        
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        
+        #crosshair::before {
+            top: 50%;
+            left: 20%;
+            width: 60%;
+            height: 2px;
+            transform: translateY(-50%);
+        }
+        
+        #crosshair::after {
+            left: 50%;
+            top: 20%;
+            width: 2px;
+            height: 60%;
+            transform: translateX(-50%);
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+            pointer-events: auto;
+            width: 90%;
+            max-width: 400px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            background: rgba(255, 255, 255, 0.95);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            font-size: 13px;
+            min-width: 120px;
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+        }
+        
+        .control-btn.primary {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+        }
+        
+        .control-btn.place {
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            color: white;
+        }
+        
+        .control-btn.danger {
+            background: linear-gradient(45deg, #f44336, #da190b);
+            color: white;
+        }
+        
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        #permissionDialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .dialog-content {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 350px;
+            margin: 15px;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+        }
+        
+        .dialog-content h2 {
+            font-size: 20px;
+            margin-top: 0;
+        }
+        
+        .dialog-content p {
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        
+        .dialog-btn {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            margin-top: 10px;
+        }
+        
+        .dialog-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 998;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 320px;
+            width: 90%;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #instructions h3 {
+            font-size: 18px;
+            margin-top: 0;
+        }
+        
+        #instructions ul {
+            text-align: left;
+            margin: 10px 0;
+            padding-left: 20px;
+            font-size: 13px;
+        }
+        
+        #instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            margin: 8px 0;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #00ffff);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        .click-hint {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: bold;
+            animation: clickHint 2s infinite;
+            z-index: 700;
+            pointer-events: none;
+            max-width: 150px;
+            text-align: center;
+        }
+        
+        @keyframes clickHint {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.03); }
+        }
+        
+        /* Media queries para móviles */
+        @media (max-width: 480px) {
+            #ui {
+                padding: 8px 12px;
+                max-width: 240px;
+                font-size: 12px;
+            }
+            
+            #ui h3 {
+                font-size: 14px;
+            }
+            
+            .control-btn {
+                padding: 10px 15px;
+                font-size: 12px;
+                min-width: 100px;
+            }
+            
+            .dialog-content {
+                padding: 20px;
+            }
+            
+            .dialog-content h2 {
+                font-size: 18px;
+            }
+            
+            .dialog-content p {
+                font-size: 13px;
+            }
+            
+            #instructions {
+                padding: 15px;
+            }
+            
+            #instructions h3 {
+                font-size: 16px;
+            }
+            
+            #instructions ul {
+                font-size: 12px;
+            }
+        }
+        
+        @media (max-height: 600px) {
+            #instructions {
+                top: 60%;
+                transform: translate(-50%, -60%);
+            }
+            
+            #controls {
+                bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="permissionDialog">
+        <div class="dialog-content">
+            <h2>📐 Scanner Manual de Superficie</h2>
+            <p>Marca 4 puntos para definir la superficie</p>
+            <p>🎯 <strong>Haz clic/toca para marcar las 4 esquinas</strong></p>
+            <p>📍 <strong>Los puntos se numerarán automáticamente</strong></p>
+            <p>📦 <strong>El objeto aparecerá en el centro</strong></p>
+            <p>🔹 Control total sobre la superficie</p>
+            <p>🔹 Colocación precisa de objetos</p>
+            <button class="dialog-btn" onclick="requestCamera()">🚀 Iniciar Scanner</button>
+        </div>
+    </div>
+    
+    <div id="container" style="display: none;">
+        <video id="video" autoplay muted playsinline></video>
+        <div id="threejs-container"></div>
+        <div id="click-overlay"></div>
+        <div id="crosshair"></div>
+        
+        <div id="ui">
+            <h3>📐 Scanner Manual</h3>
+            <p><strong>Estado:</strong> <span id="status">Iniciando...</span></p>
+            <p><strong>Puntos:</strong> <span id="cornerCount">0/4</span></p>
+            <p><strong>Superficie:</strong> <span id="surfaceStatus">Marcando puntos...</span></p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="scanProgress"></div>
+            </div>
+            <p><small>Haz clic en las 4 esquinas de la superficie</small></p>
+        </div>
+        
+        <div id="instructions">
+            <h3>🎯 Marcar Superficie</h3>
+            <p>Haz clic o toca para marcar las 4 esquinas:</p>
+            <ul>
+                <li>📱 <strong>Toca/haz clic en la esquina superior izquierda</strong></li>
+                <li>📱 <strong>Luego la esquina superior derecha</strong></li>
+                <li>📱 <strong>después la esquina inferior derecha</strong></li>
+                <li>📱 <strong>finalmente la esquina inferior izquierda</strong></li>
+            </ul>
+            <p><small>Después de 4 puntos, el objeto se colocará automáticamente</small></p>
+        </div>
+        
+        <div id="controls">
+            <button class="control-btn primary" onclick="undoLastPoint()">↶ Deshacer Punto</button>
+            <button class="control-btn place" onclick="placeObject()" disabled>📦 Colocar Objeto</button>
+            <button class="control-btn danger" onclick="resetPoints()">🔄 Reiniciar</button>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let video, scene, camera, renderer;
+        let manualCorners = [];
+        let surfaceOutline = null;
+        let placedObjects = [];
+        let isInitialized = false;
+        let detectedSurface = null;
+        let animationId;
+        let clickOverlay;
+        let crosshair;
+        let videoWidth, videoHeight;
+        let videoAspectRatio = 1;
+        let videoElement = null;
+        
+        // Inicializar Three.js
+        function initThreeJS() {
+            const container = document.getElementById('threejs-container');
+            
+            scene = new THREE.Scene();
+            
+            camera = new THREE.PerspectiveCamera(
+                75, 
+                window.innerWidth / window.innerHeight, 
+                0.1, 
+                1000
+            );
+            camera.position.set(0, 5, 8);
+            camera.lookAt(0, 0, 0);
+            
+            renderer = new THREE.WebGLRenderer({ 
+                alpha: true, 
+                antialias: true 
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            
+            container.appendChild(renderer.domElement);
+            
+            // Luces
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            // Crear superficie de referencia invisible
+            const planeGeometry = new THREE.PlaneGeometry(20, 20);
+            const planeMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0x888888, 
+                transparent: true, 
+                opacity: 0 
+            });
+            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+            plane.rotation.x = -Math.PI / 2;
+            plane.receiveShadow = true;
+            scene.add(plane);
+            
+            animate();
+        }
+        
+        // Solicitar permiso de cámara
+        async function requestCamera() {
+            try {
+                document.getElementById('permissionDialog').style.display = 'none';
+                document.getElementById('container').style.display = 'block';
+                await init();
+            } catch (error) {
+                console.error('Error al solicitar cámara:', error);
+                alert('Error al acceder a la cámara. Por favor, recarga la página y permite el acceso.');
+            }
+        }
+        
+        // Inicializar la aplicación
+        async function init() {
+            if (isInitialized) return;
+            
+            try {
+                updateStatus('Iniciando cámara...');
+                
+                video = document.getElementById('video');
+                videoElement = video;
+                clickOverlay = document.getElementById('click-overlay');
+                crosshair = document.getElementById('crosshair');
+                
+                initThreeJS();
+                setupEventListeners();
+                
+                const constraints = {
+                    video: { 
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    video.play().then(() => {
+                        // Obtener dimensiones reales del video
+                        videoWidth = video.videoWidth;
+                        videoHeight = video.videoHeight;
+                        videoAspectRatio = videoWidth / videoHeight;
+                        
+                        updateStatus('✅ Listo para marcar puntos');
+                        isInitialized = true;
+                        showClickHints();
+                    });
+                };
+                
+            } catch (error) {
+                console.error('Error en init:', error);
+                updateStatus('❌ Error al acceder a la cámara');
+            }
+        }
+        
+        // Configurar eventos
+        function setupEventListeners() {
+            // Eventos de clic/toque
+            clickOverlay.addEventListener('click', handleClick);
+            clickOverlay.addEventListener('touchstart', handleTouch, { passive: false });
+            
+            // Mostrar crosshair al mover el mouse
+            clickOverlay.addEventListener('mousemove', showCrosshair);
+            clickOverlay.addEventListener('mouseleave', hideCrosshair);
+        }
+        
+        // Manejar clic
+        function handleClick(event) {
+            event.preventDefault();
+            const rect = clickOverlay.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            addManualPoint(x, y);
+        }
+        
+        // Manejar toque
+        function handleTouch(event) {
+            event.preventDefault();
+            const rect = clickOverlay.getBoundingClientRect();
+            const touch = event.touches[0];
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            addManualPoint(x, y);
+        }
+        
+        // Mostrar crosshair
+        function showCrosshair(event) {
+            if (manualCorners.length >= 4) return;
+            
+            const rect = clickOverlay.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            crosshair.style.left = x + 'px';
+            crosshair.style.top = y + 'px';
+            crosshair.style.display = 'block';
+        }
+        
+        // Ocultar crosshair
+        function hideCrosshair() {
+            crosshair.style.display = 'none';
+        }
+        
+        // Agregar punto manual
+        function addManualPoint(x, y) {
+            if (manualCorners.length >= 4) {
+                alert('✅ Ya has marcado los 4 puntos. Usa "Reiniciar" para empezar de nuevo.');
+                return;
+            }
+            
+            // Convertir coordenadas de pantalla a coordenadas de video
+            const videoCoords = screenToVideoCoords(x, y);
+            
+            const point = { 
+                x, 
+                y,
+                videoX: videoCoords.x,
+                videoY: videoCoords.y
+            };
+            
+            manualCorners.push(point);
+            
+            showCornerPoint(point, manualCorners.length - 1);
+            updateCornerCount(manualCorners.length);
+            updateScanProgress((manualCorners.length / 4) * 100);
+            
+            // Feedback visual y sonoro
+            createClickFeedback(x, y);
+            
+            updateStatus(`📍 Punto ${manualCorners.length} marcado`);
+            
+            if (manualCorners.length === 4) {
+                completeSurface();
+            } else {
+                const nextCorner = ['superior izquierda', 'superior derecha', 'inferior derecha', 'inferior izquierda'][manualCorners.length];
+                showClickHint(x, y, `Siguiente: ${nextCorner}`);
+            }
+        }
+        
+        // Convertir coordenadas de pantalla a coordenadas de video
+        function screenToVideoCoords(screenX, screenY) {
+            if (!videoElement) return { x: screenX, y: screenY };
+            
+            const rect = videoElement.getBoundingClientRect();
+            const videoWidth = videoElement.videoWidth || 1;
+            const videoHeight = videoElement.videoHeight || 1;
+            
+            // Calcular relación de aspecto
+            const videoAspect = videoWidth / videoHeight;
+            const displayAspect = rect.width / rect.height;
+            
+            let scaleX, scaleY;
+            
+            if (videoAspect > displayAspect) {
+                // El video está más ancho que el contenedor (bordes arriba/abajo)
+                scaleX = rect.width;
+                scaleY = rect.width / videoAspect;
+            } else {
+                // El video está más alto que el contenedor (bordes izquierda/derecha)
+                scaleX = rect.height * videoAspect;
+                scaleY = rect.height;
+            }
+            
+            // Calcular desplazamiento
+            const offsetX = (rect.width - scaleX) / 2;
+            const offsetY = (rect.height - scaleY) / 2;
+            
+            // Convertir coordenadas
+            const videoX = ((screenX - offsetX) / scaleX) * videoWidth;
+            const videoY = ((screenY - offsetY) / scaleY) * videoHeight;
+            
+            return {
+                x: Math.max(0, Math.min(videoWidth, videoX)),
+                y: Math.max(0, Math.min(videoHeight, videoY))
+            };
+        }
+        
+        // Crear feedback visual del clic
+        function createClickFeedback(x, y) {
+            const feedback = document.createElement('div');
+            feedback.style.position = 'absolute';
+            feedback.style.left = x + 'px';
+            feedback.style.top = y + 'px';
+            feedback.style.width = '8px';
+            feedback.style.height = '8px';
+            feedback.style.background = '#fff';
+            feedback.style.borderRadius = '50%';
+            feedback.style.transform = 'translate(-50%, -50%)';
+            feedback.style.zIndex = '800';
+            feedback.style.pointerEvents = 'none';
+            feedback.style.animation = 'clickFeedback 0.6s ease-out forwards';
+            
+            document.body.appendChild(feedback);
+            
+            // Crear animación CSS si no existe
+            if (!document.getElementById('clickFeedbackStyles')) {
+                const style = document.createElement('style');
+                style.id = 'clickFeedbackStyles';
+                style.textContent = `
+                    @keyframes clickFeedback {
+                        0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+                        100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            setTimeout(() => {
+                if (feedback.parentNode) {
+                    feedback.parentNode.removeChild(feedback);
+                }
+            }, 600);
+        }
+        
+        // Mostrar hint de clic
+        function showClickHint(x, y, text) {
+            // Limpiar hints anteriores
+            const existingHints = document.querySelectorAll('.click-hint');
+            existingHints.forEach(hint => {
+                if (hint.parentNode) {
+                    hint.parentNode.removeChild(hint);
+                }
+            });
+            
+            const hint = document.createElement('div');
+            hint.className = 'click-hint';
+            hint.textContent = text;
+            hint.style.left = x + 'px';
+            hint.style.top = (y - 40) + 'px';
+            hint.style.transform = 'translateX(-50%)';
+            
+            document.body.appendChild(hint);
+            
+            setTimeout(() => {
+                if (hint.parentNode) {
+                    hint.parentNode.removeChild(hint);
+                }
+            }, 3000);
+        }
+        
+        // Mostrar hints iniciales
+        function showClickHints() {
+            const hints = [
+                { x: window.innerWidth * 0.25, y: window.innerHeight * 0.3, text: '1. Haz clic aquí (Sup. Izq.)' },
+                { x: window.innerWidth * 0.75, y: window.innerHeight * 0.3, text: '2. Después aquí (Sup. Der.)' },
+                { x: window.innerWidth * 0.75, y: window.innerHeight * 0.7, text: '3. Luego aquí (Inf. Der.)' },
+                { x: window.innerWidth * 0.25, y: window.innerHeight * 0.7, text: '4. Finalmente aquí (Inf. Izq.)' }
+            ];
+            
+            hints.forEach((hint, index) => {
+                setTimeout(() => {
+                    showClickHint(hint.x, hint.y, hint.text);
+                }, index * 1000);
+            });
+        }
+        
+        // Completar superficie
+        function completeSurface() {
+            hideCrosshair();
+            
+            // Limpiar hints
+            const existingHints = document.querySelectorAll('.click-hint');
+            existingHints.forEach(hint => {
+                if (hint.parentNode) {
+                    hint.parentNode.removeChild(hint);
+                }
+            });
+            
+            // Marcar puntos como confirmados
+            const cornerPoints = document.querySelectorAll('.corner-point');
+            cornerPoints.forEach(point => {
+                point.classList.add('confirmed');
+            });
+            
+            // Mostrar contorno de superficie
+            showSurfaceOutline(manualCorners);
+            
+            // Crear superficie detectada
+            detectedSurface = {
+                corners: manualCorners,
+                center: calculateCenter(manualCorners),
+                confirmed: true,
+                manual: true
+            };
+            
+            updateStatus('✅ Superficie completada!');
+            updateSurfaceStatus('📐 Superficie manual confirmada');
+            
+            // Ocultar instrucciones
+            document.getElementById('instructions').style.display = 'none';
+            
+            // Habilitar botón de colocar objeto
+            document.querySelector('.control-btn.place').disabled = false;
+            
+            // Colocar objeto automáticamente
+            setTimeout(() => {
+                placeObject();
+            }, 1000);
+        }
+        
+        // Calcular centro de los puntos
+        function calculateCenter(corners) {
+            const centerX = corners.reduce((sum, corner) => sum + corner.x, 0) / corners.length;
+            const centerY = corners.reduce((sum, corner) => sum + corner.y, 0) / corners.length;
+            return { x: centerX, y: centerY };
+        }
+        
+        // Mostrar punto de esquina
+        function showCornerPoint(corner, index) {
+            const point = document.createElement('div');
+            point.className = 'corner-point';
+            point.style.left = corner.x + 'px';
+            point.style.top = corner.y + 'px';
+            
+            const label = document.createElement('div');
+            label.className = 'corner-label';
+            label.textContent = `Punto ${index + 1}`;
+            point.appendChild(label);
+            
+            document.body.appendChild(point);
+            
+            // Animación de aparición
+            point.style.transform = 'translate(-50%, -50%) scale(0)';
+            setTimeout(() => {
+                point.style.transition = 'transform 0.3s ease';
+                point.style.transform = 'translate(-50%, -50%) scale(1)';
+            }, 50);
+        }
+        
+        // Mostrar contorno de superficie
+        function showSurfaceOutline(corners) {
+            if (surfaceOutline && surfaceOutline.parentNode) {
+                surfaceOutline.parentNode.removeChild(surfaceOutline);
+            }
+            
+            // Calcular bounding box
+            const minX = Math.min(...corners.map(c => c.x));
+            const maxX = Math.max(...corners.map(c => c.x));
+            const minY = Math.min(...corners.map(c => c.y));
+            const maxY = Math.max(...corners.map(c => c.y));
+            
+            surfaceOutline = document.createElement('div');
+            surfaceOutline.className = 'surface-outline';
+            surfaceOutline.style.left = minX + 'px';
+            surfaceOutline.style.top = minY + 'px';
+            surfaceOutline.style.width = (maxX - minX) + 'px';
+            surfaceOutline.style.height = (maxY - minY) + 'px';
+            
+            document.body.appendChild(surfaceOutline);
+            
+            // Animación de aparición
+            surfaceOutline.style.opacity = '0';
+            surfaceOutline.style.transform = 'scale(0.8)';
+            setTimeout(() => {
+                surfaceOutline.style.transition = 'all 0.5s ease';
+                surfaceOutline.style.opacity = '1';
+                surfaceOutline.style.transform = 'scale(1)';
+            }, 100);
+        }
+        
+        // Deshacer último punto
+        function undoLastPoint() {
+            if (manualCorners.length === 0) {
+                alert('⚠️ No hay puntos para deshacer.');
+                return;
+            }
+            
+            // Remover último punto
+            manualCorners.pop();
+            
+            // Limpiar y redibujar puntos
+            clearManualCorners();
+            
+            manualCorners.forEach((corner, index) => {
+                showCornerPoint(corner, index);
+            });
+            
+            updateCornerCount(manualCorners.length);
+            updateScanProgress((manualCorners.length / 4) * 100);
+            updateStatus(`↶ Punto eliminado. Puntos: ${manualCorners.length}/4`);
+            
+            // Limpiar superficie si estaba completa
+            if (detectedSurface) {
+                detectedSurface = null;
+                updateSurfaceStatus('Marcando puntos...');
+                document.getElementById('instructions').style.display = 'block';
+                document.querySelector('.control-btn.place').disabled = true;
+                
+                if (surfaceOutline && surfaceOutline.parentNode) {
+                    surfaceOutline.parentNode.removeChild(surfaceOutline);
+                }
+            }
+        }
+        
+        // Reiniciar puntos
+        function resetPoints() {
+            manualCorners = [];
+            detectedSurface = null;
+            
+            clearManualCorners();
+            updateCornerCount(0);
+            updateScanProgress(0);
+            updateStatus('🔄 Puntos reiniciados');
+            updateSurfaceStatus('Marcando puntos...');
+            
+            // Mostrar instrucciones nuevamente
+            document.getElementById('instructions').style.display = 'block';
+            
+            // Deshabilitar botón de colocar objeto
+            document.querySelector('.control-btn.place').disabled = true;
+            
+            // Limpiar superficie outline
+            if (surfaceOutline && surfaceOutline.parentNode) {
+                surfaceOutline.parentNode.removeChild(surfaceOutline);
+            }
+            
+            // Limpiar objetos colocados
+            clearPlacedObjects();
+            
+            // Mostrar hints nuevamente
+            setTimeout(() => {
+                showClickHints();
+            }, 500);
+        }
+        
+        // Limpiar puntos manuales visuales
+        function clearManualCorners() {
+            const cornerPoints = document.querySelectorAll('.corner-point');
+            cornerPoints.forEach(point => {
+                if (point.parentNode) {
+                    point.parentNode.removeChild(point);
+                }
+            });
+        }
+        
+        // Limpiar objetos colocados
+        function clearPlacedObjects() {
+            placedObjects.forEach(obj => {
+                if (obj.parent) {
+                    obj.parent.remove(obj);
+                }
+            });
+            placedObjects = [];
+        }
+        
+        // Colocar objeto en la superficie
+        function placeObject() {
+            if (!detectedSurface) {
+                alert('⚠️ Primero marca los 4 puntos de la superficie.');
+                return;
+            }
+            
+            // Limpiar objetos anteriores
+            clearPlacedObjects();
+            
+            // Crear objeto 3D (cubo colorido)
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const materials = [
+                new THREE.MeshLambertMaterial({ color: 0xff0000 }), // Rojo
+                new THREE.MeshLambertMaterial({ color: 0x00ff00 }), // Verde
+                new THREE.MeshLambertMaterial({ color: 0x0000ff }), // Azul
+                new THREE.MeshLambertMaterial({ color: 0xffff00 }), // Amarillo
+                new THREE.MeshLambertMaterial({ color: 0xff00ff }), // Magenta
+                new THREE.MeshLambertMaterial({ color: 0x00ffff })  // Cian
+            ];
+            
+            const cube = new THREE.Mesh(geometry, materials);
+            cube.position.set(0, 0.5, 0); // Colocar sobre la superficie
+            cube.castShadow = true;
+            
+            // Agregar animación de rotación
+            cube.userData = { 
+                rotationSpeed: 0.01,
+                bounceSpeed: 0.02,
+                time: 0
+            };
+            
+            scene.add(cube);
+            placedObjects.push(cube);
+            
+            updateStatus('📦 ¡Objeto colocado en la superficie!');
+            
+            // Mostrar mensaje de éxito
+            showSuccessMessage();
+        }
+        
+       // Mostrar mensaje de éxito
+        function showSuccessMessage() {
+            const message = document.createElement('div');
+            message.style.position = 'fixed';
+            message.style.top = '50%';
+            message.style.left = '50%';
+            message.style.transform = 'translate(-50%, -50%)';
+            message.style.background = 'linear-gradient(45deg, #4CAF50, #45a049)';
+            message.style.color = 'white';
+            message.style.padding = '20px 30px';
+            message.style.borderRadius = '15px';
+            message.style.fontSize = '18px';
+            message.style.fontWeight = 'bold';
+            message.style.zIndex = '1500';
+            message.style.textAlign = 'center';
+            message.style.boxShadow = '0 10px 30px rgba(0,0,0,0.3)';
+            message.innerHTML = '🎉 ¡Superficie detectada!<br>📦 Objeto colocado correctamente';
+            
+            document.body.appendChild(message);
+            
+            // Animación de entrada
+            message.style.opacity = '0';
+            message.style.transform = 'translate(-50%, -50%) scale(0.5)';
+            setTimeout(() => {
+                message.style.transition = 'all 0.3s ease';
+                message.style.opacity = '1';
+                message.style.transform = 'translate(-50%, -50%) scale(1)';
+            }, 50);
+            
+            // Remover después de 3 segundos
+            setTimeout(() => {
+                message.style.transition = 'all 0.3s ease';
+                message.style.opacity = '0';
+                message.style.transform = 'translate(-50%, -50%) scale(0.5)';
+                setTimeout(() => {
+                    if (message.parentNode) {
+                        message.parentNode.removeChild(message);
+                    }
+                }, 300);
+            }, 3000);
+        }
+        
+        // Actualizar estado
+        function updateStatus(status) {
+            document.getElementById('status').textContent = status;
+        }
+        
+        // Actualizar contador de esquinas
+        function updateCornerCount(count) {
+            document.getElementById('cornerCount').textContent = `${count}/4`;
+        }
+        
+        // Actualizar estado de superficie
+        function updateSurfaceStatus(status) {
+            document.getElementById('surfaceStatus').textContent = status;
+        }
+        
+        // Actualizar progreso del escaneo
+        function updateScanProgress(percentage) {
+            document.getElementById('scanProgress').style.width = `${percentage}%`;
+        }
+        
+        // Función de animación
+        function animate() {
+            animationId = requestAnimationFrame(animate);
+            
+            // Animar objetos colocados
+            placedObjects.forEach(obj => {
+                if (obj.userData) {
+                    obj.userData.time += 0.016; // ~60fps
+                    
+                    // Rotación
+                    obj.rotation.x += obj.userData.rotationSpeed;
+                    obj.rotation.y += obj.userData.rotationSpeed * 1.5;
+                    
+                    // Efecto de rebote
+                    obj.position.y = 0.5 + Math.sin(obj.userData.time * 3) * 0.2;
+                }
+            });
+            
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // Redimensionar ventana
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+        
+        // Prevenir zoom en dispositivos móviles
+        document.addEventListener('touchstart', (event) => {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+        
+        document.addEventListener('touchmove', (event) => {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+        
+        // Inicializar cuando se carga la página
+        document.addEventListener('DOMContentLoaded', () => {
+            // Ya está configurado para iniciar con el botón
+        });
+        
+        // Manejar errores
+        window.addEventListener('error', (event) => {
+            console.error('Error en la aplicación:', event.error);
+            updateStatus('❌ Error en la aplicación');
+        });
+        
+        // Función para limpiar recursos
+        function cleanup() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            
+            if (video && video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+            }
+            
+            clearPlacedObjects();
+            clearManualCorners();
+        }
+        
+        // Limpiar recursos al cerrar la página
+        window.addEventListener('beforeunload', cleanup);
+        
+        // Detectar si el dispositivo soporta touch
+        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        
+        if (isTouchDevice) {
+            // Ajustes específicos para dispositivos táctiles
+            document.body.style.touchAction = 'none';
+        }
+        
+    </script>
+</body>
+</html>
