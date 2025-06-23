@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Pokémon Style - Detección 3D</title>
+    <title>AR Surface Detector - Caja 3D</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body {
@@ -49,42 +49,63 @@
             background: rgba(0, 0, 0, 0.85);
             color: white;
             padding: 15px 20px;
-            border-radius: 20px;
-            font-size: 14px;
-            max-width: 300px;
-            backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
-        #crosshair {
+        #surface-indicator {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 999;
-            width: 50px;
-            height: 50px;
-            border: 3px solid rgba(255, 255, 255, 0.9);
-            border-radius: 50%;
+            width: 200px;
+            height: 200px;
+            border: 3px solid #00ff00;
+            border-radius: 10px;
+            z-index: 500;
+            display: none;
             pointer-events: none;
-            animation: crosshairPulse 2s infinite;
+            background: rgba(0, 255, 0, 0.1);
+            animation: surfacePulse 2s infinite;
         }
         
-        #crosshair::before {
+        @keyframes surfacePulse {
+            0%, 100% { 
+                transform: scale(1); 
+                opacity: 0.8; 
+                border-color: #00ff00;
+            }
+            50% { 
+                transform: scale(1.05); 
+                opacity: 1; 
+                border-color: #00ff88;
+            }
+        }
+        
+        #surface-indicator::before {
+            content: '📦 Superficie Detectada';
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 0, 0.9);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        
+        #surface-indicator::after {
             content: '';
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 10px;
-            height: 10px;
-            background: rgba(255, 255, 255, 0.9);
+            width: 20px;
+            height: 20px;
+            background: #00ff00;
             border-radius: 50%;
-        }
-        
-        @keyframes crosshairPulse {
-            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
-            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            box-shadow: 0 0 20px #00ff00;
         }
         
         #controls {
@@ -95,8 +116,6 @@
             z-index: 1000;
             display: flex;
             gap: 15px;
-            flex-wrap: wrap;
-            justify-content: center;
             pointer-events: auto;
         }
         
@@ -104,39 +123,28 @@
             background: rgba(255, 255, 255, 0.95);
             border: none;
             padding: 15px 25px;
-            border-radius: 30px;
+            border-radius: 25px;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.3s ease;
             backdrop-filter: blur(10px);
-            font-size: 14px;
-            border: 2px solid transparent;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
         
         .control-btn:hover {
             background: rgba(255, 255, 255, 1);
-            transform: scale(1.05);
+            transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0,0,0,0.3);
         }
         
-        .control-btn.active {
-            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+        .control-btn.primary {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
             color: white;
-            border-color: rgba(255, 255, 255, 0.3);
         }
         
-        #catchBtn {
-            background: linear-gradient(45deg, #FF6B6B, #FF8E53);
+        .control-btn.danger {
+            background: linear-gradient(45deg, #f44336, #da190b);
             color: white;
-            font-size: 16px;
-            padding: 18px 35px;
-            animation: catchPulse 2s infinite;
-        }
-        
-        @keyframes catchPulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
         }
         
         #permissionDialog {
@@ -155,7 +163,7 @@
         .dialog-content {
             background: rgba(255, 255, 255, 0.95);
             padding: 40px;
-            border-radius: 25px;
+            border-radius: 20px;
             text-align: center;
             max-width: 400px;
             margin: 20px;
@@ -164,14 +172,13 @@
         }
         
         .dialog-btn {
-            background: linear-gradient(45deg, #4ECDC4, #44A08D);
+            background: linear-gradient(45deg, #4CAF50, #45a049);
             color: white;
             border: none;
-            padding: 18px 35px;
-            border-radius: 30px;
+            padding: 15px 30px;
+            border-radius: 25px;
             cursor: pointer;
             font-size: 16px;
-            margin: 15px;
             font-weight: bold;
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
@@ -180,28 +187,6 @@
         .dialog-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-        }
-        
-        .surface-grid {
-            position: absolute;
-            pointer-events: none;
-            z-index: 300;
-            opacity: 0.6;
-        }
-        
-        .surface-point {
-            position: absolute;
-            width: 8px;
-            height: 8px;
-            background: #4ECDC4;
-            border-radius: 50%;
-            animation: surfaceGlow 1.5s infinite;
-            box-shadow: 0 0 10px #4ECDC4;
-        }
-        
-        @keyframes surfaceGlow {
-            0%, 100% { transform: scale(1); opacity: 0.8; }
-            50% { transform: scale(1.5); opacity: 1; }
         }
         
         #instructions {
@@ -220,53 +205,39 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
-        .pokemon-indicator {
+        .detection-overlay {
             position: absolute;
-            font-size: 24px;
-            z-index: 500;
-            animation: bounce 2s infinite;
-            text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
-        }
-        
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-15px); }
-        }
-        
-        .catch-effect {
-            position: absolute;
-            width: 100px;
-            height: 100px;
-            border: 3px solid #FFD700;
-            border-radius: 50%;
-            animation: catchEffect 1s ease-out;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             pointer-events: none;
-            z-index: 800;
+            z-index: 400;
         }
         
-        @keyframes catchEffect {
-            0% { 
-                transform: scale(0) rotate(0deg); 
-                opacity: 1; 
-                border-color: #FFD700;
-            }
-            100% { 
-                transform: scale(3) rotate(360deg); 
-                opacity: 0; 
-                border-color: #FF6B6B;
-            }
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00ff00, transparent);
+            animation: scanLine 3s infinite;
+        }
+        
+        @keyframes scanLine {
+            0% { top: 0%; opacity: 1; }
+            100% { top: 100%; opacity: 0; }
         }
     </style>
 </head>
 <body>
     <div id="permissionDialog">
         <div class="dialog-content">
-            <h2>🎮 AR Pokémon Experience</h2>
-            <p>¡Experimenta realidad aumentada con objetos 3D!</p>
-            <p>🔹 Detección automática de superficies</p>
-            <p>🔹 Objetos 3D realistas</p>
-            <p>🔹 Efectos visuales avanzados</p>
-            <button class="dialog-btn" onclick="requestCamera()">🚀 Iniciar Aventura AR</button>
+            <h2>📦 Detector de Superficies AR</h2>
+            <p>Detecta una superficie y coloca una caja 3D realista</p>
+            <p>🔹 Detección automática de superficies planas</p>
+            <p>🔹 Caja 3D con texturas realistas</p>
+            <p>🔹 Visualización en tiempo real</p>
+            <button class="dialog-btn" onclick="requestCamera()">🚀 Iniciar Detector</button>
         </div>
     </div>
 
@@ -274,52 +245,59 @@
         <video id="video" autoplay muted playsinline></video>
         <div id="threejs-container"></div>
         
-        <div id="ui">
-            <h3>🎯 AR Pokémon Hunter</h3>
-            <p><strong>Estado:</strong> <span id="status">Iniciando...</span></p>
-            <p><strong>Superficies:</strong> <span id="surfaceCount">0</span></p>
-            <p><strong>Pokémon:</strong> <span id="pokemonCount">0</span></p>
-            <div style="margin-top: 10px; font-size: 12px; opacity: 0.8;">
-                🟢 Mueve la cámara lentamente<br>
-                🎯 Apunta al centro para capturar
-            </div>
+        <div class="detection-overlay">
+            <div class="scan-line"></div>
         </div>
         
-        <div id="crosshair"></div>
+        <div id="surface-indicator"></div>
+        
+        <div id="ui">
+            <h3>📦 Detector de Superficies</h3>
+            <p><strong>Estado:</strong> <span id="status">Iniciando...</span></p>
+            <p><strong>Superficie:</strong> <span id="surfaceStatus">No detectada</span></p>
+            <p><strong>Caja 3D:</strong> <span id="boxStatus">No colocada</span></p>
+        </div>
         
         <div id="instructions">
-            <h3>📱 Busca Pokémon Salvajes</h3>
-            <p>Apunta la cámara hacia:</p>
-            <ul style="text-align: left;">
-                <li>🏠 Superficies planas (mesas, suelo)</li>
-                <li>📚 Libros o revistas</li>
-                <li>🌿 Césped o áreas abiertas</li>
-                <li>🎯 Cualquier superficie estable</li>
+            <h3>🔍 Buscando Superficie</h3>
+            <p>Apunta la cámara hacia una superficie plana:</p>
+            <ul style="text-align: left; margin: 15px 0;">
+                <li>📱 Mesa o escritorio</li>
+                <li>📚 Libro abierto</li>
+                <li>🏠 Suelo</li>
+                <li>📄 Papel blanco</li>
             </ul>
-            <p><small>Los puntos azules indican dónde pueden aparecer Pokémon</small></p>
+            <p><small>Mantén la cámara estable cuando aparezca el indicador verde</small></p>
         </div>
         
         <div id="controls">
-            <button class="control-btn active" onclick="selectPokemon('pikachu')">⚡ Pikachu</button>
-            <button class="control-btn" onclick="selectPokemon('pokeball')">⚪ Pokéball</button>
-            <button class="control-btn" onclick="selectPokemon('charmander')">🔥 Charmander</button>
-            <button class="control-btn" onclick="selectPokemon('squirtle')">💧 Squirtle</button>
-            <button id="catchBtn" class="control-btn" onclick="catchPokemon()">🎯 ¡Capturar!</button>
-            <button class="control-btn" onclick="clearAll()">🗑️ Limpiar</button>
+            <button class="control-btn primary" onclick="placeBox()">📦 Colocar Caja</button>
+            <button class="control-btn danger" onclick="clearBox()">🗑️ Limpiar</button>
+            <button class="control-btn" onclick="changeBoxType()">🎨 Cambiar Tipo</button>
         </div>
     </div>
 
     <script>
         // Variables globales
         let video, scene, camera, renderer;
-        let currentPokemon = 'pikachu';
-        let surfacePoints = [];
-        let placedObjects = [];
+        let detectedSurface = null;
+        let placedBox = null;
         let isInitialized = false;
-        let pokemonCount = 0;
+        let currentBoxType = 'wooden';
         let animationId;
         
-        // Configuración Three.js
+        // Tipos de cajas disponibles
+        const boxTypes = {
+            wooden: { color: 0x8B4513, name: 'Madera' },
+            metal: { color: 0x708090, name: 'Metal' },
+            cardboard: { color: 0xDEB887, name: 'Cartón' },
+            plastic: { color: 0x4169E1, name: 'Plástico' }
+        };
+        
+        let currentTypeIndex = 0;
+        const typeKeys = Object.keys(boxTypes);
+        
+        // Inicializar Three.js
         function initThreeJS() {
             const container = document.getElementById('threejs-container');
             
@@ -333,7 +311,7 @@
                 0.1, 
                 1000
             );
-            camera.position.z = 5;
+            camera.position.set(0, 2, 5);
             
             // Crear renderer
             renderer = new THREE.WebGLRenderer({ 
@@ -347,206 +325,150 @@
             
             container.appendChild(renderer.domElement);
             
-            // Añadir luces
+            // Luces
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambientLight);
             
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(10, 10, 5);
+            directionalLight.position.set(5, 10, 5);
             directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
             scene.add(directionalLight);
+            
+            // Luz puntual para efectos
+            const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
+            pointLight.position.set(0, 5, 0);
+            scene.add(pointLight);
             
             // Iniciar loop de renderizado
             animate();
         }
         
-        // Crear geometrías 3D para diferentes Pokémon
-        function createPokemon3D(type, position) {
-            let mesh;
+        // Crear caja 3D realista
+        function createRealisticBox(type = 'wooden') {
+            const boxGroup = new THREE.Group();
+            
+            // Geometría de la caja
+            const boxGeometry = new THREE.BoxGeometry(1.5, 1, 1.5);
+            
+            // Material según el tipo
+            let material;
+            const boxType = boxTypes[type];
             
             switch(type) {
-                case 'pikachu':
-                    // Cuerpo de Pikachu
-                    const pikachuGroup = new THREE.Group();
-                    
-                    // Cuerpo principal
-                    const bodyGeometry = new THREE.SphereGeometry(0.8, 16, 16);
-                    const bodyMaterial = new THREE.MeshPhongMaterial({ 
-                        color: 0xFFD700,
-                        shininess: 30
+                case 'wooden':
+                    material = new THREE.MeshPhongMaterial({
+                        color: boxType.color,
+                        shininess: 30,
+                        transparent: true,
+                        opacity: 0.9
                     });
-                    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-                    body.castShadow = true;
-                    pikachuGroup.add(body);
+                    break;
                     
-                    // Orejas
-                    const earGeometry = new THREE.ConeGeometry(0.2, 0.6, 8);
-                    const earMaterial = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
+                case 'metal':
+                    material = new THREE.MeshPhongMaterial({
+                        color: boxType.color,
+                        shininess: 100,
+                        specular: 0x111111,
+                        transparent: true,
+                        opacity: 0.95
+                    });
+                    break;
                     
-                    const leftEar = new THREE.Mesh(earGeometry, earMaterial);
-                    leftEar.position.set(-0.4, 0.8, 0);
-                    leftEar.rotation.z = -0.3;
-                    pikachuGroup.add(leftEar);
-                    
-                    const rightEar = new THREE.Mesh(earGeometry, earMaterial);
-                    rightEar.position.set(0.4, 0.8, 0);
-                    rightEar.rotation.z = 0.3;
-                    pikachuGroup.add(rightEar);
-                    
-                    // Puntas negras de las orejas
-                    const tipGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-                    const tipMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
-                    
-                    const leftTip = new THREE.Mesh(tipGeometry, tipMaterial);
-                    leftTip.position.set(-0.5, 1.2, 0);
-                    pikachuGroup.add(leftTip);
-                    
-                    const rightTip = new THREE.Mesh(tipGeometry, tipMaterial);
-                    rightTip.position.set(0.5, 1.2, 0);
-                    pikachuGroup.add(rightTip);
-                    
-                    // Mejillas rojas
-                    const cheekGeometry = new THREE.CircleGeometry(0.15, 8);
-                    const cheekMaterial = new THREE.MeshPhongMaterial({ 
-                        color: 0xFF6B6B,
+                case 'cardboard':
+                    material = new THREE.MeshPhongMaterial({
+                        color: boxType.color,
+                        shininess: 5,
                         transparent: true,
                         opacity: 0.8
                     });
-                    
-                    const leftCheek = new THREE.Mesh(cheekGeometry, cheekMaterial);
-                    leftCheek.position.set(-0.6, 0.2, 0.7);
-                    pikachuGroup.add(leftCheek);
-                    
-                    const rightCheek = new THREE.Mesh(cheekGeometry, cheekMaterial);
-                    rightCheek.position.set(0.6, 0.2, 0.7);
-                    pikachuGroup.add(rightCheek);
-                    
-                    mesh = pikachuGroup;
                     break;
                     
-                case 'pokeball':
-                    const pokeballGroup = new THREE.Group();
-                    
-                    // Mitad superior (roja)
-                    const topGeometry = new THREE.SphereGeometry(0.6, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
-                    const topMaterial = new THREE.MeshPhongMaterial({ color: 0xFF4444 });
-                    const topHalf = new THREE.Mesh(topGeometry, topMaterial);
-                    topHalf.castShadow = true;
-                    pokeballGroup.add(topHalf);
-                    
-                    // Mitad inferior (blanca)
-                    const bottomGeometry = new THREE.SphereGeometry(0.6, 16, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5);
-                    const bottomMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
-                    const bottomHalf = new THREE.Mesh(bottomGeometry, bottomMaterial);
-                    bottomHalf.castShadow = true;
-                    pokeballGroup.add(bottomHalf);
-                    
-                    // Banda central
-                    const bandGeometry = new THREE.CylinderGeometry(0.62, 0.62, 0.1, 16);
-                    const bandMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
-                    const band = new THREE.Mesh(bandGeometry, bandMaterial);
-                    band.rotation.x = Math.PI / 2;
-                    pokeballGroup.add(band);
-                    
-                    // Botón central
-                    const buttonGeometry = new THREE.SphereGeometry(0.15, 8, 8);
-                    const buttonMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
-                    const button = new THREE.Mesh(buttonGeometry, buttonMaterial);
-                    button.position.z = 0.62;
-                    pokeballGroup.add(button);
-                    
-                    mesh = pokeballGroup;
-                    break;
-                    
-                case 'charmander':
-                    const charmanderGroup = new THREE.Group();
-                    
-                    // Cuerpo
-                    const charBodyGeometry = new THREE.SphereGeometry(0.7, 16, 16);
-                    const charBodyMaterial = new THREE.MeshPhongMaterial({ color: 0xFF8C42 });
-                    const charBody = new THREE.Mesh(charBodyGeometry, charBodyMaterial);
-                    charBody.castShadow = true;
-                    charmanderGroup.add(charBody);
-                    
-                    // Cola con fuego
-                    const tailGeometry = new THREE.ConeGeometry(0.15, 1.2, 8);
-                    const tailMaterial = new THREE.MeshPhongMaterial({ color: 0xFF8C42 });
-                    const tail = new THREE.Mesh(tailGeometry, tailMaterial);
-                    tail.position.set(0.8, 0.2, -0.5);
-                    tail.rotation.z = -0.8;
-                    charmanderGroup.add(tail);
-                    
-                    // Llama de la cola
-                    const flameGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-                    const flameMaterial = new THREE.MeshPhongMaterial({ 
-                        color: 0xFF4444,
-                        emissive: 0xFF2222,
-                        emissiveIntensity: 0.3
+                case 'plastic':
+                    material = new THREE.MeshPhongMaterial({
+                        color: boxType.color,
+                        shininess: 80,
+                        transparent: true,
+                        opacity: 0.7
                     });
-                    const flame = new THREE.Mesh(flameGeometry, flameMaterial);
-                    flame.position.set(1.3, 0.8, -0.5);
-                    charmanderGroup.add(flame);
-                    
-                    mesh = charmanderGroup;
                     break;
-                    
-                case 'squirtle':
-                    const squirtleGroup = new THREE.Group();
-                    
-                    // Caparazón
-                    const shellGeometry = new THREE.SphereGeometry(0.8, 16, 16);
-                    const shellMaterial = new THREE.MeshPhongMaterial({ color: 0x4A90E2 });
-                    const shell = new THREE.Mesh(shellGeometry, shellMaterial);
-                    shell.castShadow = true;
-                    squirtleGroup.add(shell);
-                    
-                    // Cabeza
-                    const headGeometry = new THREE.SphereGeometry(0.4, 12, 12);
-                    const headMaterial = new THREE.MeshPhongMaterial({ color: 0x87CEEB });
-                    const head = new THREE.Mesh(headGeometry, headMaterial);
-                    head.position.set(0, 0.2, 0.9);
-                    squirtleGroup.add(head);
-                    
-                    // Patas
-                    const legGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-                    const legMaterial = new THREE.MeshPhongMaterial({ color: 0x87CEEB });
-                    
-                    const positions = [
-                        [-0.6, -0.8, 0.3], [0.6, -0.8, 0.3],
-                        [-0.4, -0.8, -0.6], [0.4, -0.8, -0.6]
-                    ];
-                    
-                    positions.forEach(pos => {
-                        const leg = new THREE.Mesh(legGeometry, legMaterial);
-                        leg.position.set(...pos);
-                        squirtleGroup.add(leg);
-                    });
-                    
-                    mesh = squirtleGroup;
-                    break;
-                    
-                default:
-                    // Pokémon por defecto
-                    const defaultGeometry = new THREE.SphereGeometry(0.8, 16, 16);
-                    const defaultMaterial = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
-                    mesh = new THREE.Mesh(defaultGeometry, defaultMaterial);
-                    mesh.castShadow = true;
             }
             
-            // Posicionar el objeto
-            if (position) {
-                mesh.position.copy(position);
-            }
+            // Crear la caja principal
+            const box = new THREE.Mesh(boxGeometry, material);
+            box.castShadow = true;
+            box.receiveShadow = true;
+            boxGroup.add(box);
             
-            // Añadir animación de flotación
-            mesh.userData = {
-                originalY: mesh.position.y,
+            // Añadir detalles a la caja
+            addBoxDetails(boxGroup, type);
+            
+            // Posicionar la caja
+            boxGroup.position.set(0, 0.5, -3);
+            
+            // Datos de animación
+            boxGroup.userData = {
+                originalY: boxGroup.position.y,
                 time: 0,
-                floatSpeed: 0.02 + Math.random() * 0.01,
-                floatAmount: 0.1 + Math.random() * 0.05
+                floatSpeed: 0.02,
+                floatAmount: 0.05,
+                rotationSpeed: 0.01
             };
             
-            return mesh;
+            return boxGroup;
+        }
+        
+        // Añadir detalles a la caja
+        function addBoxDetails(boxGroup, type) {
+            // Crear bordes/esquinas
+            const edgeGeometry = new THREE.CylinderGeometry(0.02, 0.02, 1, 8);
+            const edgeMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x333333,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            // Bordes verticales
+            const positions = [
+                [-0.73, 0, -0.73], [0.73, 0, -0.73],
+                [-0.73, 0, 0.73], [0.73, 0, 0.73]
+            ];
+            
+            positions.forEach(pos => {
+                const edge = new THREE.Mesh(edgeGeometry, edgeMaterial);
+                edge.position.set(...pos);
+                boxGroup.add(edge);
+            });
+            
+            // Añadir etiqueta según el tipo
+            addBoxLabel(boxGroup, type);
+        }
+        
+        // Añadir etiqueta a la caja
+        function addBoxLabel(boxGroup, type) {
+            const labelGeometry = new THREE.PlaneGeometry(0.8, 0.3);
+            const labelMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.9
+            });
+            
+            const label = new THREE.Mesh(labelGeometry, labelMaterial);
+            label.position.set(0, 0.2, 0.76);
+            boxGroup.add(label);
+            
+            // Texto del tipo (simulado con color)
+            const textGeometry = new THREE.PlaneGeometry(0.6, 0.1);
+            const textMaterial = new THREE.MeshBasicMaterial({
+                color: 0x000000,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const text = new THREE.Mesh(textGeometry, textMaterial);
+            text.position.set(0, 0.2, 0.77);
+            boxGroup.add(text);
         }
         
         // Solicitar permiso de cámara
@@ -578,190 +500,108 @@
                 const constraints = {
                     video: { 
                         facingMode: { ideal: 'environment' },
-                        width: { ideal: 1280, max: 1920 },
-                        height: { ideal: 720, max: 1080 }
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
                     },
                     audio: false
                 };
                 
-                updateStatus('Solicitando acceso a cámara...');
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                
                 video.srcObject = stream;
                 
                 video.onloadedmetadata = () => {
                     video.play().then(() => {
-                        updateStatus('✅ Cámara iniciada - Detectando superficies');
-                        document.getElementById('instructions').style.display = 'block';
-                        
-                        // Iniciar detección de superficies
-                        startAdvancedSurfaceDetection();
-                        
+                        updateStatus('✅ Cámara iniciada');
+                        startSurfaceDetection();
                         isInitialized = true;
-                    }).catch(error => {
-                        console.error('Error al reproducir video:', error);
-                        updateStatus('❌ Error al iniciar video');
                     });
                 };
                 
             } catch (error) {
                 console.error('Error en init:', error);
                 updateStatus('❌ Error al acceder a la cámara');
-                
-                if (error.name === 'NotAllowedError') {
-                    alert('Acceso a la cámara denegado. Por favor, permite el acceso y recarga la página.');
-                } else if (error.name === 'NotFoundError') {
-                    alert('No se encontró ninguna cámara. Asegúrate de que tu dispositivo tenga una cámara.');
-                } else {
-                    alert('Error al acceder a la cámara: ' + error.message);
-                }
             }
         }
         
-        // Detección avanzada de superficies
-        function startAdvancedSurfaceDetection() {
+        // Iniciar detección de superficies
+        function startSurfaceDetection() {
             setInterval(() => {
                 if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
-                    detectAdvancedSurfaces();
+                    detectSurface();
                 }
             }, 500);
         }
         
-        // Detectar superficies con algoritmo mejorado
-        function detectAdvancedSurfaces() {
+        // Detectar superficie
+        function detectSurface() {
             if (!video || !video.videoWidth || !video.videoHeight) return;
             
-            // Limpiar puntos anteriores
-            clearSurfaceIndicators();
-            surfacePoints = [];
-            
             try {
-                // Crear canvas temporal para análisis
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = Math.min(video.videoWidth, 200);
-                tempCanvas.height = Math.min(video.videoHeight, 150);
+                // Crear canvas temporal
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 160;
+                canvas.height = 120;
                 
-                // Dibujar video en canvas temporal
-                tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+                // Dibujar frame del video
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
                 // Obtener datos de imagen
-                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const data = imageData.data;
                 
-                // Análisis mejorado de superficies
-                const gridSize = 20;
-                const threshold = 30;
+                // Buscar área con mayor uniformidad (superficie plana)
+                let bestSurface = null;
+                let bestScore = 0;
                 
-                for (let y = gridSize; y < tempCanvas.height - gridSize; y += gridSize) {
-                    for (let x = gridSize; x < tempCanvas.width - gridSize; x += gridSize) {
-                        // Calcular múltiples métricas
-                        const gradient = calculateGradient(data, x, y, gridSize, tempCanvas.width);
-                        const contrast = calculateContrast(data, x, y, gridSize, tempCanvas.width);
-                        const uniformity = calculateUniformity(data, x, y, gridSize, tempCanvas.width);
+                const gridSize = 20;
+                
+                for (let y = gridSize; y < canvas.height - gridSize; y += gridSize) {
+                    for (let x = gridSize; x < canvas.width - gridSize; x += gridSize) {
+                        const uniformity = calculateUniformity(data, x, y, gridSize, canvas.width);
+                        const contrast = calculateContrast(data, x, y, gridSize, canvas.width);
                         
-                        // Algoritmo de puntuación compuesto
-                        const surfaceScore = (
-                            (1 - gradient / 100) * 0.4 +
-                            (1 - contrast / 100) * 0.3 +
-                            uniformity * 0.3
-                        );
+                        // Puntuación combinada (alta uniformidad, bajo contraste = superficie plana)
+                        const score = uniformity * 0.7 + (1 - contrast / 100) * 0.3;
                         
-                        // Si la puntuación es alta, es probablemente una superficie
-                        if (surfaceScore > 0.6 && Math.random() > 0.3) {
-                            const screenX = (x / tempCanvas.width) * window.innerWidth;
-                            const screenY = (y / tempCanvas.height) * window.innerHeight;
-                            
-                            surfacePoints.push({ 
-                                x: screenX, 
-                                y: screenY, 
-                                confidence: surfaceScore,
-                                time: Date.now(),
-                                gradient: gradient,
-                                contrast: contrast,
-                                uniformity: uniformity
-                            });
-                            
-                            showAdvancedSurfaceIndicator(screenX, screenY, surfaceScore);
+                        if (score > bestScore && score > 0.6) {
+                            bestScore = score;
+                            bestSurface = {
+                                x: (x / canvas.width) * window.innerWidth,
+                                y: (y / canvas.height) * window.innerHeight,
+                                confidence: score,
+                                size: gridSize * 2
+                            };
                         }
                     }
                 }
                 
-                // Añadir puntos simulados si no hay suficientes
-                if (surfacePoints.length < 3) {
-                    addEnhancedSimulatedSurfaces();
-                }
-                
-                // Spawning automático de Pokémon
-                if (surfacePoints.length > 0 && Math.random() > 0.95) {
-                    autoSpawnPokemon();
-                }
-                
-                updateSurfaceCount(surfacePoints.length);
-                
-                if (surfacePoints.length > 0) {
-                    updateStatus(`🟢 ${surfacePoints.length} superficie(s) detectada(s)`);
+                // Actualizar superficie detectada
+                if (bestSurface) {
+                    detectedSurface = bestSurface;
+                    showSurfaceIndicator(bestSurface);
+                    updateSurfaceStatus(`✅ Detectada (${Math.round(bestSurface.confidence * 100)}%)`);
                     document.getElementById('instructions').style.display = 'none';
                 } else {
-                    updateStatus('🔍 Buscando superficies...');
-                    if (placedObjects.length === 0) {
+                    hideSurfaceIndicator();
+                    updateSurfaceStatus('❌ No detectada');
+                    if (!placedBox) {
                         document.getElementById('instructions').style.display = 'block';
                     }
                 }
                 
             } catch (error) {
                 console.error('Error en detección:', error);
-                addEnhancedSimulatedSurfaces();
+                // Crear superficie simulada en el centro
+                detectedSurface = {
+                    x: window.innerWidth / 2,
+                    y: window.innerHeight / 2,
+                    confidence: 0.8,
+                    size: 200
+                };
+                showSurfaceIndicator(detectedSurface);
+                updateSurfaceStatus('✅ Superficie simulada');
             }
-        }
-        
-        // Calcular contraste (continuación)
-        function calculateContrast(data, centerX, centerY, size, width) {
-            const halfSize = Math.floor(size / 2);
-            let min = 255, max = 0;
-            
-            for (let dy = -halfSize; dy < halfSize; dy++) {
-                for (let dx = -halfSize; dx < halfSize; dx++) {
-                    const x = centerX + dx;
-                    const y = centerY + dy;
-                    if (x >= 0 && x < width && y >= 0) {
-                        const idx = (y * width + x) * 4;
-                        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-                        min = Math.min(min, brightness);
-                        max = Math.max(max, brightness);
-                    }
-                }
-            }
-            return max - min;
-        }
-        
-        // Calcular gradiente
-        function calculateGradient(data, centerX, centerY, size, width) {
-            const halfSize = Math.floor(size / 2);
-            let gradientSum = 0;
-            let count = 0;
-            
-            for (let dy = -halfSize; dy < halfSize - 1; dy++) {
-                for (let dx = -halfSize; dx < halfSize - 1; dx++) {
-                    const x = centerX + dx;
-                    const y = centerY + dy;
-                    if (x >= 0 && x < width - 1 && y >= 0) {
-                        const idx1 = (y * width + x) * 4;
-                        const idx2 = (y * width + (x + 1)) * 4;
-                        const idx3 = ((y + 1) * width + x) * 4;
-                        
-                        const b1 = (data[idx1] + data[idx1 + 1] + data[idx1 + 2]) / 3;
-                        const b2 = (data[idx2] + data[idx2 + 1] + data[idx2 + 2]) / 3;
-                        const b3 = (data[idx3] + data[idx3 + 1] + data[idx3 + 2]) / 3;
-                        
-                        const gradX = Math.abs(b2 - b1);
-                        const gradY = Math.abs(b3 - b1);
-                        gradientSum += Math.sqrt(gradX * gradX + gradY * gradY);
-                        count++;
-                    }
-                }
-            }
-            return count > 0 ? gradientSum / count : 0;
         }
         
         // Calcular uniformidad
@@ -785,220 +625,119 @@
             
             const mean = values.reduce((a, b) => a + b) / values.length;
             const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-            const stdDev = Math.sqrt(variance);
             
-            return Math.max(0, 1 - stdDev / 50); // Normalizar
+            return Math.max(0, 1 - Math.sqrt(variance) / 50);
         }
         
-        // Mostrar indicador avanzado de superficie
-        function showAdvancedSurfaceIndicator(x, y, confidence) {
-            const indicator = document.createElement('div');
-            indicator.className = 'surface-point';
-            indicator.style.left = (x - 4) + 'px';
-            indicator.style.top = (y - 4) + 'px';
-            indicator.style.background = `hsl(${180 + confidence * 60}, 70%, 60%)`;
-            indicator.style.boxShadow = `0 0 ${10 + confidence * 10}px hsl(${180 + confidence * 60}, 70%, 60%)`;
+        // Calcular contraste
+        function calculateContrast(data, centerX, centerY, size, width) {
+            const halfSize = Math.floor(size / 2);
+            let min = 255, max = 0;
             
-            document.body.appendChild(indicator);
-            
-            // Remover después de 2 segundos
-            setTimeout(() => {
-                if (indicator.parentNode) {
-                    indicator.parentNode.removeChild(indicator);
-                }
-            }, 2000);
-        }
-        
-        // Limpiar indicadores de superficie
-        function clearSurfaceIndicators() {
-            const indicators = document.querySelectorAll('.surface-point');
-            indicators.forEach(indicator => {
-                if (indicator.parentNode) {
-                    indicator.parentNode.removeChild(indicator);
-                }
-            });
-        }
-        
-        // Añadir superficies simuladas mejoradas
-        function addEnhancedSimulatedSurfaces() {
-            const patterns = [
-                // Patrón en cuadrícula
-                { x: 0.3, y: 0.4 }, { x: 0.7, y: 0.4 },
-                { x: 0.3, y: 0.6 }, { x: 0.7, y: 0.6 },
-                // Patrón en L
-                { x: 0.2, y: 0.3 }, { x: 0.2, y: 0.7 }, { x: 0.5, y: 0.7 },
-                // Patrón diagonal
-                { x: 0.4, y: 0.2 }, { x: 0.6, y: 0.4 }, { x: 0.8, y: 0.6 }
-            ];
-            
-            patterns.forEach((pattern, index) => {
-                const x = pattern.x * window.innerWidth;
-                const y = pattern.y * window.innerHeight;
-                const confidence = 0.7 + Math.random() * 0.3;
-                
-                surfacePoints.push({
-                    x: x,
-                    y: y,
-                    confidence: confidence,
-                    time: Date.now(),
-                    simulated: true,
-                    pattern: index
-                });
-                
-                showAdvancedSurfaceIndicator(x, y, confidence);
-            });
-        }
-        
-        // Spawn automático de Pokémon
-        function autoSpawnPokemon() {
-            if (surfacePoints.length === 0) return;
-            
-            const randomSurface = surfacePoints[Math.floor(Math.random() * surfacePoints.length)];
-            const pokemonTypes = ['pikachu', 'pokeball', 'charmander', 'squirtle'];
-            const randomType = pokemonTypes[Math.floor(Math.random() * pokemonTypes.length)];
-            
-            placePokemonAt(randomSurface.x, randomSurface.y, randomType);
-            
-            // Mostrar indicador de aparición
-            showPokemonSpawnEffect(randomSurface.x, randomSurface.y, randomType);
-        }
-        
-        // Mostrar efecto de aparición de Pokémon
-        function showPokemonSpawnEffect(x, y, type) {
-            const effect = document.createElement('div');
-            effect.className = 'pokemon-indicator';
-            effect.innerHTML = getPokemonEmoji(type);
-            effect.style.left = (x - 12) + 'px';
-            effect.style.top = (y - 12) + 'px';
-            
-            document.body.appendChild(effect);
-            
-            setTimeout(() => {
-                if (effect.parentNode) {
-                    effect.parentNode.removeChild(effect);
-                }
-            }, 3000);
-        }
-        
-        // Obtener emoji de Pokémon
-        function getPokemonEmoji(type) {
-            const emojis = {
-                'pikachu': '⚡',
-                'pokeball': '⚪',
-                'charmander': '🔥',
-                'squirtle': '💧'
-            };
-            return emojis[type] || '⚡';
-        }
-        
-        // Colocar Pokémon en posición específica
-        function placePokemonAt(screenX, screenY, type) {
-            // Convertir coordenadas de pantalla a coordenadas 3D
-            const x = (screenX / window.innerWidth) * 10 - 5;
-            const y = -(screenY / window.innerHeight) * 6 + 3;
-            const z = -2 - Math.random() * 3;
-            
-            const position = new THREE.Vector3(x, y, z);
-            const pokemon = createPokemon3D(type || currentPokemon, position);
-            
-            scene.add(pokemon);
-            placedObjects.push(pokemon);
-            
-            pokemonCount++;
-            updatePokemonCount(pokemonCount);
-            
-            // Efecto de aparición
-            pokemon.scale.set(0, 0, 0);
-            const targetScale = 1;
-            
-            function scaleUp() {
-                if (pokemon.scale.x < targetScale) {
-                    pokemon.scale.x += 0.05;
-                    pokemon.scale.y += 0.05;
-                    pokemon.scale.z += 0.05;
-                    requestAnimationFrame(scaleUp);
+            for (let dy = -halfSize; dy < halfSize; dy++) {
+                for (let dx = -halfSize; dx < halfSize; dx++) {
+                    const x = centerX + dx;
+                    const y = centerY + dy;
+                    if (x >= 0 && x < width && y >= 0) {
+                        const idx = (y * width + x) * 4;
+                        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                        min = Math.min(min, brightness);
+                        max = Math.max(max, brightness);
+                    }
                 }
             }
-            scaleUp();
+            return max - min;
         }
         
-        // Seleccionar tipo de Pokémon
-        function selectPokemon(type) {
-            currentPokemon = type;
-            
-            // Actualizar botones
-            document.querySelectorAll('.control-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            event.target.classList.add('active');
-            updateStatus(`🎯 Seleccionado: ${type.charAt(0).toUpperCase() + type.slice(1)}`);
+        // Mostrar indicador de superficie
+        function showSurfaceIndicator(surface) {
+            const indicator = document.getElementById('surface-indicator');
+            indicator.style.display = 'block';
+            indicator.style.left = (surface.x - 100) + 'px';
+            indicator.style.top = (surface.y - 100) + 'px';
+            indicator.style.width = (surface.size || 200) + 'px';
+            indicator.style.height = (surface.size || 200) + 'px';
         }
         
-        // Capturar Pokémon
-        function catchPokemon() {
-            if (surfacePoints.length === 0) {
-                updateStatus('❌ No hay superficies detectadas');
+        // Ocultar indicador de superficie
+        function hideSurfaceIndicator() {
+            document.getElementById('surface-indicator').style.display = 'none';
+        }
+        
+        // Colocar caja
+        function placeBox() {
+            if (!detectedSurface) {
+                updateStatus('❌ No hay superficie detectada');
                 return;
             }
             
-            // Encontrar superficie más cercana al centro
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
-            let closestSurface = null;
-            let minDistance = Infinity;
+            // Remover caja anterior si existe
+            if (placedBox) {
+                scene.remove(placedBox);
+            }
             
-            surfacePoints.forEach(surface => {
-                const distance = Math.sqrt(
-                    Math.pow(surface.x - centerX, 2) + 
-                    Math.pow(surface.y - centerY, 2)
-                );
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestSurface = surface;
+            // Crear nueva caja
+            placedBox = createRealisticBox(currentBoxType);
+            
+            // Posicionar según la superficie detectada
+            const surfaceWorldPos = screenToWorld(detectedSurface.x, detectedSurface.y);
+            placedBox.position.set(surfaceWorldPos.x, surfaceWorldPos.y + 0.5, surfaceWorldPos.z);
+            
+            // Añadir a la escena
+            scene.add(placedBox);
+            
+            // Animación de aparición
+            placedBox.scale.set(0, 0, 0);
+            animateBoxAppearance(placedBox);
+            
+            updateBoxStatus(`✅ Caja ${boxTypes[currentBoxType].name} colocada`);
+            updateStatus('✅ Caja colocada en superficie');
+        }
+        
+        // Convertir coordenadas de pantalla a mundo 3D
+        function screenToWorld(screenX, screenY) {
+            const x = (screenX / window.innerWidth) * 6 - 3;
+            const y = -(screenY / window.innerHeight) * 4 + 2;
+            const z = -3;
+            
+            return new THREE.Vector3(x, y, z);
+        }
+        
+        // Animar aparición de la caja
+        function animateBoxAppearance(box) {
+            const targetScale = 1;
+            const animateScale = () => {
+                if (box.scale.x < targetScale) {
+                    box.scale.x += 0.05;
+                    box.scale.y += 0.05;
+                    box.scale.z += 0.05;
+                    requestAnimationFrame(animateScale);
                 }
-            });
+            };
+            animateScale();
+        }
+        
+        // Cambiar tipo de caja
+        function changeBoxType() {
+            currentTypeIndex = (currentTypeIndex + 1) % typeKeys.length;
+            currentBoxType = typeKeys[currentTypeIndex];
             
-            if (closestSurface && minDistance < 100) {
-                placePokemonAt(closestSurface.x, closestSurface.y, currentPokemon);
-                showCatchEffect(closestSurface.x, closestSurface.y);
-                updateStatus(`✅ ¡${currentPokemon.charAt(0).toUpperCase() + currentPokemon.slice(1)} capturado!`);
-            } else {
-                // Colocar en el centro si no hay superficie cercana
-                placePokemonAt(centerX, centerY, currentPokemon);
-                showCatchEffect(centerX, centerY);
-                updateStatus(`✅ ¡${currentPokemon.charAt(0).toUpperCase() + currentPokemon.slice(1)} apareció!`);
+            updateStatus(`🎨 Tipo: ${boxTypes[currentBoxType].name}`);
+            
+            // Si hay una caja colocada, reemplazarla
+            if (placedBox) {
+                placeBox();
             }
         }
         
-        // Mostrar efecto de captura
-        function showCatchEffect(x, y) {
-            const effect = document.createElement('div');
-            effect.className = 'catch-effect';
-            effect.style.left = (x - 50) + 'px';
-            effect.style.top = (y - 50) + 'px';
-            
-            document.body.appendChild(effect);
-            
-            setTimeout(() => {
-                if (effect.parentNode) {
-                    effect.parentNode.removeChild(effect);
-                }
-            }, 1000);
-        }
-        
-        // Limpiar todos los objetos
-        function clearAll() {
-            // Remover objetos de la escena
-            placedObjects.forEach(obj => {
-                scene.remove(obj);
-            });
-            
-            placedObjects = [];
-            pokemonCount = 0;
-            
-            updatePokemonCount(0);
-            updateStatus('🗑️ Escena limpiada');
+        // Limpiar caja
+        function clearBox() {
+            if (placedBox) {
+                scene.remove(placedBox);
+                placedBox = null;
+                updateBoxStatus('❌ No colocada');
+                updateStatus('🗑️ Caja eliminada');
+            }
         }
         
         // Actualizar estado
@@ -1006,33 +745,28 @@
             document.getElementById('status').textContent = message;
         }
         
-        // Actualizar contador de superficies
-        function updateSurfaceCount(count) {
-            document.getElementById('surfaceCount').textContent = count;
+        // Actualizar estado de superficie
+        function updateSurfaceStatus(message) {
+            document.getElementById('surfaceStatus').textContent = message;
         }
         
-        // Actualizar contador de Pokémon
-        function updatePokemonCount(count) {
-            document.getElementById('pokemonCount').textContent = count;
+        // Actualizar estado de caja
+        function updateBoxStatus(message) {
+            document.getElementById('boxStatus').textContent = message;
         }
         
         // Loop de animación
         function animate() {
             animationId = requestAnimationFrame(animate);
             
-            // Animar objetos colocados
-            placedObjects.forEach(obj => {
-                if (obj.userData) {
-                    obj.userData.time += obj.userData.floatSpeed;
-                    obj.position.y = obj.userData.originalY + 
-                        Math.sin(obj.userData.time) * obj.userData.floatAmount;
-                    
-                    // Rotación suave
-                    obj.rotation.y += 0.01;
-                }
-            });
+            // Animar caja colocada
+            if (placedBox && placedBox.userData) {
+                placedBox.userData.time += placedBox.userData.floatSpeed;
+                placedBox.position.y = placedBox.userData.originalY + 
+                    Math.sin(placedBox.userData.time) * placedBox.userData.floatAmount;
+                placedBox.rotation.y += placedBox.userData.rotationSpeed;
+            }
             
-            // Renderizar escena
             renderer.render(scene, camera);
         }
         
@@ -1043,125 +777,31 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
         
-        // Manejar orientación en móviles
-        window.addEventListener('orientationchange', () => {
-            setTimeout(() => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            }, 100);
-        });
-        
         // Controles táctiles
-        let touchStartX = 0;
-        let touchStartY = 0;
-        
         document.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-        });
-        
-        document.addEventListener('touchend', (e) => {
-            const touchEndX = e.changedTouches[0].clientX;
-            const touchEndY = e.changedTouches[0].clientY;
+            if (e.target.closest('#controls')) return;
             
-            const deltaX = Math.abs(touchEndX - touchStartX);
-            const deltaY = Math.abs(touchEndY - touchStartY);
+            const touch = e.touches[0];
+            const rect = document.getElementById('container').getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
             
-            // Si fue un tap rápido (no deslizamiento)
-            if (deltaX < 10 && deltaY < 10) {
-                // Colocar Pokémon donde se hizo tap
-                placePokemonAt(touchEndX, touchEndY, currentPokemon);
-                showCatchEffect(touchEndX, touchEndY);
-            }
-        });
-        
-        // Efectos de sonido simulados
-        function playSound(type) {
-            // Vibración en dispositivos móviles
-            if (navigator.vibrate) {
-                switch(type) {
-                    case 'catch':
-                        navigator.vibrate([100, 50, 100]);
-                        break;
-                    case 'spawn':
-                        navigator.vibrate(200);
-                        break;
+            // Colocar caja donde se toca
+            if (detectedSurface) {
+                const surfaceWorldPos = screenToWorld(x, y);
+                if (placedBox) {
+                    placedBox.position.set(surfaceWorldPos.x, surfaceWorldPos.y + 0.5, surfaceWorldPos.z);
+                } else {
+                    placeBox();
                 }
             }
-        }
-        
-        // Auto-inicialización mejorada
-        document.addEventListener('DOMContentLoaded', () => {
-            // Añadir eventos a botones
-            document.querySelectorAll('.control-btn').forEach(btn => {
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    btn.style.transform = 'scale(0.95)';
-                });
-                
-                btn.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    btn.style.transform = 'scale(1)';
-                });
-            });
-            
-            // Precargar recursos
-            updateStatus('🎮 Listo para iniciar AR');
         });
         
-        // Funciones de utilidad adicionales
-        function getRandomPosition() {
-            return {
-                x: Math.random() * window.innerWidth,
-                y: Math.random() * window.innerHeight
-            };
-        }
-        
-        function createParticleEffect(x, y, color = 0xFFD700) {
-            const particles = new THREE.Group();
-            
-            for (let i = 0; i < 20; i++) {
-                const geometry = new THREE.SphereGeometry(0.02, 4, 4);
-                const material = new THREE.MeshBasicMaterial({ color: color });
-                const particle = new THREE.Mesh(geometry, material);
-                
-                particle.position.set(
-                    (Math.random() - 0.5) * 2,
-                    (Math.random() - 0.5) * 2,
-                    (Math.random() - 0.5) * 2
-                );
-                
-                particles.add(particle);
-            }
-            
-            return particles;
-        }
-        
-        // Configuraciones avanzadas
-        const CONFIG = {
-            DETECTION_INTERVAL: 500,
-            SPAWN_PROBABILITY: 0.02,
-            MAX_POKEMON: 20,
-            SURFACE_CONFIDENCE_THRESHOLD: 0.6,
-            CATCH_RADIUS: 100
-        };
-        
-        // Sistema de puntuación
-        let score = 0;
-        let combo = 0;
-        
-        function updateScore(points) {
-            score += points * (combo + 1);
-            combo++;
-            
-            setTimeout(() => {
-                combo = Math.max(0, combo - 1);
-            }, 5000);
-        }
-        
-        console.log('🎮 AR Pokémon System Loaded');
-        console.log('📱 Optimizado para dispositivos móviles');
-        console.log('🎯 Sistema de detección avanzado activado');
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+            updateStatus('🎮 Listo para iniciar');
+            console.log('📦 AR Surface Detector iniciado');
+        });
     </script>
 </body>
+</html>
