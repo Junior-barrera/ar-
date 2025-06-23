@@ -3,115 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VINCENTI SpA - Demo AR Cámara</title>
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <title>VINCENTI SpA - AR Funcional</title>
+    <!-- Importación SEGURA de Model Viewer -->
+    <script type="module" src="https://unpkg.com/@google/model-viewer@^2.1.1/dist/model-viewer.min.js"></script>
     <style>
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            background: #f0f2f5;
-            color: #333;
-        }
-        header {
-            background: #2c3e50;
-            color: white;
-            padding: 20px;
             text-align: center;
-        }
-        .container {
-            max-width: 800px;
-            margin: 20px auto;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: #f5f5f5;
         }
         model-viewer {
             width: 100%;
-            height: 500px;
+            height: 70vh;
+            margin: 0 auto;
             background: #eee;
-            margin: 20px 0;
-            border-radius: 8px;
-            overflow: hidden;
         }
         .btn-ar {
-            background: #3498db;
+            background: #4285F4;
             color: white;
             border: none;
             padding: 12px 24px;
             border-radius: 50px;
             font-size: 16px;
+            margin: 20px;
             cursor: pointer;
-            display: block;
-            margin: 20px auto;
-            transition: all 0.3s;
         }
-        .btn-ar:hover {
-            background: #2980b9;
-        }
-        .instructions {
-            background: #e8f4fc;
+        .warning {
+            color: #EA4335;
             padding: 15px;
+            background: #FFF3F3;
             border-radius: 8px;
-            margin: 20px 0;
-            border-left: 4px solid #3498db;
-        }
-        footer {
-            text-align: center;
-            padding: 20px;
-            color: #777;
+            margin: 20px;
+            display: none; /* Oculto inicialmente */
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>VINCENTI SpA</h1>
-        <p>Visualiza en Realidad Aumentada</p>
-    </header>
-
-    <div class="container">
-        <h2>Cámara de Seguridad 4K</h2>
-        <p>Modelo: DS-2CD2347G2-LU | Resolución: 8MP</p>
+    <h1>Cámara de Seguridad en AR</h1>
+    
+    <!-- Model Viewer con configuración optimizada -->
+    <model-viewer
+        id="model-viewer"
+        src="https://cdn.glitch.global/6d2f3931-7c71-43a7-8d3e-6b6d5e5e8b9d/SecurityCamera.glb?v=1644356789045"
+        ar
+        ar-modes="scene-viewer webxr quick-look"
+        camera-controls
+        environment-image="neutral"
+        shadow-intensity="1"
+        auto-rotate
+        alt="Cámara 4K Hikvision">
         
-        <!-- Modelo 3D con AR -->
-        <model-viewer
-            src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/SecurityCamera/glTF-Binary/SecurityCamera.glb"
-            ar
-            ar-modes="scene-viewer webxr quick-look"
-            camera-controls
-            environment-image="neutral"
-            shadow-intensity="1"
-            alt="Cámara de Seguridad 4K"
-            auto-rotate
-            rotation-per-second="30deg">
-            
-            <button class="btn-ar" slot="ar-button">
-                👁️ Ver en tu espacio
-            </button>
-        </model-viewer>
-
-        <div class="instructions">
-            <h3>Instrucciones:</h3>
-            <p><strong>📱 En móvil:</strong></p>
-            <ol>
-                <li>Toca el botón <strong>"Ver en tu espacio"</strong>.</li>
-                <li>Permite el acceso a la cámara.</li>
-                <li>Apunta a una superficie plana (suelo/pared) y toca para colocar la cámara.</li>
-            </ol>
-            <p><strong>💻 En desktop:</strong></p>
-            <ul>
-                <li>Usa el ratón para rotar el modelo.</li>
-                <li>Si tienes webcam, toca el ícono AR en la esquina del modelo.</li>
-            </ul>
-        </div>
-
-        <button class="btn-ar" onclick="window.open('https://www.vincenti.cl', '_blank')">
-            🛒 Comprar ahora
+        <button class="btn-ar" slot="ar-button">
+            👁️ Ver en tu espacio
         </button>
+    </model-viewer>
+
+    <!-- Mensaje de error/soporte -->
+    <div id="warning" class="warning">
+        <h3>⚠️ No se puede activar AR</h3>
+        <p id="warning-text"></p>
+        <p><a href="https://www.vincenti.cl" target="_blank">Ver producto en web</a></p>
     </div>
 
-    <footer>
-        <p>© 2024 VINCENTI SpA | Desarrollado por JR Services</p>
-    </footer>
+    <script>
+        // Detección de compatibilidad con AR
+        document.addEventListener('DOMContentLoaded', () => {
+            const modelViewer = document.getElementById('model-viewer');
+            const warning = document.getElementById('warning');
+            const warningText = document.getElementById('warning-text');
+            
+            // Verificar si AR es soportado
+            modelViewer.addEventListener('ar-status', (event) => {
+                if (event.detail.status === 'failed') {
+                    warning.style.display = 'block';
+                    warningText.innerHTML = `
+                        Tu dispositivo/navegador no soporta AR. Prueba con:<br>
+                        - <strong>iPhone/iPad</strong>: Safari<br>
+                        - <strong>Android</strong>: Chrome último versión<br>
+                        <small>Modelo 3D visible solo en modo 3D</small>
+                    `;
+                }
+            });
+        });
+    </script>
 </body>
 </html>
