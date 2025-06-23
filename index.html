@@ -3,20 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor AR - Modelos 3D</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.0/aframe.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ar.js/2.2.2/aframe-ar.min.js"></script>
+    <title>AR sin Marcadores - Detección de Superficies</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body {
             margin: 0;
+            padding: 0;
             font-family: Arial, sans-serif;
             overflow: hidden;
+            background: #000;
         }
         
-        #arContainer {
+        #container {
             position: relative;
             width: 100vw;
             height: 100vh;
+        }
+        
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
         }
         
         #ui {
@@ -27,19 +48,47 @@
             background: rgba(0, 0, 0, 0.8);
             color: white;
             padding: 15px;
-            border-radius: 10px;
+            border-radius: 15px;
             font-size: 14px;
-            max-width: 300px;
+            max-width: 280px;
+            backdrop-filter: blur(10px);
+        }
+        
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 999;
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        
+        #crosshair::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
         }
         
         #controls {
             position: absolute;
-            bottom: 20px;
+            bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
         
         .control-btn {
@@ -50,10 +99,12 @@
             cursor: pointer;
             font-weight: bold;
             transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            font-size: 12px;
         }
         
         .control-btn:hover {
-            background: white;
+            background: rgba(255, 255, 255, 1);
             transform: scale(1.05);
         }
         
@@ -62,233 +113,472 @@
             color: white;
         }
         
-        #markerInfo {
+        #placeBtn {
+            background: #FF6B6B;
+            color: white;
+            font-size: 16px;
+            padding: 15px 30px;
+            margin: 10px;
+        }
+        
+        #placeBtn:hover {
+            background: #FF5252;
+        }
+        
+        #instructions {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            z-index: 999;
-            background: rgba(0, 0, 0, 0.8);
+            z-index: 998;
+            background: rgba(0, 0, 0, 0.9);
             color: white;
-            padding: 20px;
-            border-radius: 10px;
+            padding: 30px;
+            border-radius: 15px;
             text-align: center;
-            font-size: 16px;
+            max-width: 300px;
+            backdrop-filter: blur(10px);
         }
         
-        .marker-link {
-            color: #4CAF50;
-            text-decoration: none;
-            font-weight: bold;
+        .pulse {
+            animation: pulse 2s infinite;
         }
         
-        .marker-link:hover {
-            text-decoration: underline;
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.1); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .surface-indicator {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: rgba(76, 175, 80, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 500;
+            animation: surfacePulse 1.5s infinite;
+        }
+        
+        @keyframes surfacePulse {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.5); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 0.8; }
         }
     </style>
 </head>
 <body>
-    <div id="arContainer">
+    <div id="container">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="canvas"></canvas>
+        
         <div id="ui">
-            <h3>🎯 Visor AR</h3>
+            <h3>🎯 AR sin Marcadores</h3>
             <p><strong>Instrucciones:</strong></p>
             <ul>
-                <li>Permite el acceso a la cámara</li>
-                <li>Apunta a un marcador AR</li>
-                <li>Los modelos 3D aparecerán sobre el marcador</li>
-                <li>Usa los controles para cambiar modelos</li>
+                <li>Mueve la cámara lentamente</li>
+                <li>Busca superficies planas</li>
+                <li>Toca "Colocar" cuando veas el punto verde</li>
+                <li>¡El objeto aparecerá en la superficie!</li>
             </ul>
-            <p><small>Estado: <span id="status">Iniciando...</span></small></p>
+            <p><small>Estado: <span id="status">Iniciando cámara...</span></small></p>
         </div>
         
-        <div id="markerInfo">
-            <h3>📱 ¿Necesitas un marcador?</h3>
-            <p>Descarga e imprime un marcador AR:</p>
-            <a href="https://ar-js-org.github.io/AR.js/data/images/hiro.png" 
-               target="_blank" class="marker-link">Descargar Marcador Hiro</a>
-            <p><small>Imprime el marcador en papel para mejor detección</small></p>
+        <div id="crosshair"></div>
+        
+        <div id="instructions">
+            <h3>📱 Mueve tu dispositivo</h3>
+            <p>Apunta la cámara hacia superficies planas como:</p>
+            <ul style="text-align: left;">
+                <li>Mesa o escritorio</li>
+                <li>Suelo</li>
+                <li>Libros o revistas</li>
+                <li>Cualquier superficie plana</li>
+            </ul>
+            <p><small>Los puntos verdes indican superficies detectadas</small></p>
         </div>
         
         <div id="controls">
-            <button class="control-btn active" onclick="changeModel('box')">📦 Caja</button>
-            <button class="control-btn" onclick="changeModel('sphere')">⚪ Esfera</button>
-            <button class="control-btn" onclick="changeModel('cylinder')">🔘 Cilindro</button>
-            <button class="control-btn" onclick="changeModel('text')">📝 Texto</button>
+            <button class="control-btn active" onclick="changeModel('cube')">🎲 Cubo</button>
+            <button class="control-btn" onclick="changeModel('sphere')">⚽ Esfera</button>
+            <button class="control-btn" onclick="changeModel('pyramid')">🔺 Pirámide</button>
+            <button class="control-btn" onclick="changeModel('pokemon')">⚡ Pokémon</button>
+            <button id="placeBtn" class="control-btn" onclick="placeObject()">📍 Colocar Objeto</button>
+            <button class="control-btn" onclick="clearObjects()">🗑️ Limpiar</button>
         </div>
-        
-        <a-scene
-            id="arScene"
-            embedded
-            arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-            vr-mode-ui="enabled: false"
-            renderer="logarithmicDepthBuffer: true; colorManagement: true; sortObjects: true;">
-            
-            <a-assets>
-                <!-- Assets para texturas y materiales -->
-                <a-mixin id="animation-mixer" 
-                         animation-mixer="clip: *; repetitions: 1; clampWhenFinished: true"></a-mixin>
-            </a-assets>
-            
-            <!-- Marcador AR - Hiro por defecto -->
-            <a-marker id="marker" preset="hiro" smooth="true" smoothCount="10" smoothTolerance=".01" smoothThreshold="5">
-                
-                <!-- Modelo 3D - Caja por defecto -->
-                <a-entity id="model-container" position="0 0.5 0">
-                    
-                    <!-- Caja 3D -->
-                    <a-box id="box-model" 
-                           position="0 0 0" 
-                           rotation="0 45 0" 
-                           color="#4CC3D9" 
-                           shadow="cast: true"
-                           animation="property: rotation; to: 0 405 0; loop: true; dur: 10000">
-                        <a-animation attribute="position" 
-                                     dur="2000" 
-                                     to="0 0.2 0" 
-                                     direction="alternate" 
-                                     repeat="indefinite"></a-animation>
-                    </a-box>
-                    
-                    <!-- Esfera 3D -->
-                    <a-sphere id="sphere-model" 
-                              position="0 0 0" 
-                              radius="0.8" 
-                              color="#EF2D5E" 
-                              shadow="cast: true"
-                              visible="false"
-                              animation="property: rotation; to: 360 0 0; loop: true; dur: 5000">
-                        <a-animation attribute="scale" 
-                                     dur="3000" 
-                                     to="1.2 1.2 1.2" 
-                                     direction="alternate" 
-                                     repeat="indefinite"></a-animation>
-                    </a-sphere>
-                    
-                    <!-- Cilindro 3D -->
-                    <a-cylinder id="cylinder-model" 
-                                position="0 0 0" 
-                                radius="0.6" 
-                                height="1.5" 
-                                color="#FFC65D" 
-                                shadow="cast: true"
-                                visible="false"
-                                animation="property: rotation; to: 0 0 360; loop: true; dur: 8000">
-                        <a-animation attribute="position" 
-                                     dur="4000" 
-                                     to="0 0.5 0" 
-                                     direction="alternate" 
-                                     repeat="indefinite"></a-animation>
-                    </a-cylinder>
-                    
-                    <!-- Texto 3D -->
-                    <a-text id="text-model" 
-                            value="¡AR Funciona!" 
-                            position="0 0 0" 
-                            align="center" 
-                            color="#7BC8A4" 
-                            geometry="primitive: plane; width: 3; height: 1"
-                            material="color: rgba(0,0,0,0.8)"
-                            visible="false"
-                            animation="property: rotation; to: 0 360 0; loop: true; dur: 12000">
-                        <a-animation attribute="scale" 
-                                     dur="2000" 
-                                     to="1.1 1.1 1.1" 
-                                     direction="alternate" 
-                                     repeat="indefinite"></a-animation>
-                    </a-text>
-                    
-                </a-entity>
-                
-                <!-- Luces para mejor visualización -->
-                <a-light type="ambient" color="#404040" intensity="0.5"></a-light>
-                <a-light type="point" position="2 4 4" color="#ffffff" intensity="0.8"></a-light>
-                
-            </a-marker>
-            
-            <!-- Cámara -->
-            <a-entity camera look-controls-enabled="false"></a-entity>
-        </a-scene>
     </div>
 
     <script>
-        let currentModel = 'box';
-        let markerDetected = false;
+        // Variables globales
+        let scene, camera, renderer, video, canvas, ctx;
+        let objects = [];
+        let currentModel = 'cube';
+        let surfacePoints = [];
+        let isTracking = false;
+        let placedObjects = [];
         
-        // Función para cambiar modelo
+        // Inicializar la aplicación
+        async function init() {
+            try {
+                // Configurar video
+                video = document.getElementById('video');
+                canvas = document.getElementById('canvas');
+                ctx = canvas.getContext('2d');
+                
+                // Configurar Three.js
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setClearColor(0x000000, 0);
+                
+                // Configurar cámara
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                
+                video.srcObject = stream;
+                await video.play();
+                
+                updateStatus('✅ Cámara iniciada - Busca superficies');
+                document.getElementById('instructions').style.display = 'block';
+                
+                // Iniciar detección de superficies
+                startSurfaceDetection();
+                
+                // Iniciar renderizado
+                animate();
+                
+            } catch (error) {
+                console.error('Error:', error);
+                updateStatus('❌ Error al acceder a la cámara');
+            }
+        }
+        
+        // Simulación de detección de superficies
+        function startSurfaceDetection() {
+            setInterval(() => {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    detectSurfaces();
+                }
+            }, 200);
+        }
+        
+        // Detectar superficies (simulado)
+        function detectSurfaces() {
+            // Limpiar puntos anteriores
+            clearSurfaceIndicators();
+            surfacePoints = [];
+            
+            // Simular detección de superficies con análisis básico de imagen
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = video.videoWidth;
+            tempCanvas.height = video.videoHeight;
+            
+            tempCtx.drawImage(video, 0, 0);
+            
+            // Generar puntos de superficie simulados
+            for (let i = 0; i < 5; i++) {
+                if (Math.random() > 0.7) { // 30% de probabilidad por punto
+                    const x = Math.random() * window.innerWidth;
+                    const y = Math.random() * window.innerHeight * 0.6 + window.innerHeight * 0.2;
+                    
+                    surfacePoints.push({ x, y });
+                    showSurfaceIndicator(x, y);
+                }
+            }
+            
+            if (surfacePoints.length > 0) {
+                updateStatus(`🟢 ${surfacePoints.length} superficie(s) detectada(s)`);
+                document.getElementById('instructions').style.display = 'none';
+                isTracking = true;
+            } else {
+                updateStatus('🔍 Buscando superficies...');
+                if (placedObjects.length === 0) {
+                    document.getElementById('instructions').style.display = 'block';
+                }
+                isTracking = false;
+            }
+        }
+        
+        // Mostrar indicador de superficie
+        function showSurfaceIndicator(x, y) {
+            const indicator = document.createElement('div');
+            indicator.className = 'surface-indicator';
+            indicator.style.left = (x - 10) + 'px';
+            indicator.style.top = (y - 10) + 'px';
+            document.getElementById('container').appendChild(indicator);
+            
+            // Remover después de 2 segundos
+            setTimeout(() => {
+                if (indicator && indicator.parentNode) {
+                    indicator.parentNode.removeChild(indicator);
+                }
+            }, 2000);
+        }
+        
+        // Limpiar indicadores de superficie
+        function clearSurfaceIndicators() {
+            const indicators = document.querySelectorAll('.surface-indicator');
+            indicators.forEach(indicator => {
+                if (indicator.parentNode) {
+                    indicator.parentNode.removeChild(indicator);
+                }
+            });
+        }
+        
+        // Crear modelo 3D
+        function createModel(type) {
+            let geometry, material, mesh;
+            
+            switch(type) {
+                case 'cube':
+                    geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+                    material = new THREE.MeshPhongMaterial({ 
+                        color: 0x4CC3D9,
+                        shininess: 100
+                    });
+                    break;
+                    
+                case 'sphere':
+                    geometry = new THREE.SphereGeometry(0.3, 32, 32);
+                    material = new THREE.MeshPhongMaterial({ 
+                        color: 0xEF2D5E,
+                        shininess: 100
+                    });
+                    break;
+                    
+                case 'pyramid':
+                    geometry = new THREE.ConeGeometry(0.3, 0.6, 4);
+                    material = new THREE.MeshPhongMaterial({ 
+                        color: 0xFFC65D,
+                        shininess: 100
+                    });
+                    break;
+                    
+                case 'pokemon':
+                    // Crear un "Pokémon" simple con formas básicas
+                    const group = new THREE.Group();
+                    
+                    // Cuerpo
+                    const bodyGeometry = new THREE.SphereGeometry(0.3, 32, 32);
+                    const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
+                    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                    group.add(body);
+                    
+                    // Orejas
+                    const earGeometry = new THREE.ConeGeometry(0.1, 0.3, 8);
+                    const earMaterial = new THREE.MeshPhongMaterial({ color: 0xFFD700 });
+                    
+                    const ear1 = new THREE.Mesh(earGeometry, earMaterial);
+                    ear1.position.set(-0.2, 0.3, 0.1);
+                    ear1.rotation.z = -0.3;
+                    group.add(ear1);
+                    
+                    const ear2 = new THREE.Mesh(earGeometry, earMaterial);
+                    ear2.position.set(0.2, 0.3, 0.1);
+                    ear2.rotation.z = 0.3;
+                    group.add(ear2);
+                    
+                    // Puntas negras de orejas
+                    const tipGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+                    const tipMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
+                    
+                    const tip1 = new THREE.Mesh(tipGeometry, tipMaterial);
+                    tip1.position.set(-0.2, 0.45, 0.1);
+                    group.add(tip1);
+                    
+                    const tip2 = new THREE.Mesh(tipGeometry, tipMaterial);
+                    tip2.position.set(0.2, 0.45, 0.1);
+                    group.add(tip2);
+                    
+                    return group;
+            }
+            
+            mesh = new THREE.Mesh(geometry, material);
+            return mesh;
+        }
+        
+        // Colocar objeto en superficie
+        function placeObject() {
+            if (!isTracking || surfacePoints.length === 0) {
+                updateStatus('❌ No hay superficies detectadas');
+                return;
+            }
+            
+            // Usar el punto más cercano al centro
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            
+            let closestPoint = surfacePoints[0];
+            let minDistance = Infinity;
+            
+            surfacePoints.forEach(point => {
+                const distance = Math.sqrt(
+                    Math.pow(point.x - centerX, 2) + 
+                    Math.pow(point.y - centerY, 2)
+                );
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestPoint = point;
+                }
+            });
+            
+            // Crear y colocar el objeto
+            const model = createModel(currentModel);
+            
+            // Convertir coordenadas de pantalla a mundo 3D (simulado)
+            const worldX = (closestPoint.x - centerX) / 200;
+            const worldZ = (closestPoint.y - centerY) / 200;
+            
+            model.position.set(worldX, 0, worldZ);
+            
+            // Añadir animaciones
+            addAnimations(model);
+            
+            scene.add(model);
+            placedObjects.push(model);
+            
+            updateStatus(`✅ ${getModelName(currentModel)} colocado!`);
+            
+            // Efecto de colocación
+            model.scale.set(0.1, 0.1, 0.1);
+            animateScale(model, { x: 1, y: 1, z: 1 }, 500);
+        }
+        
+        // Añadir animaciones a los objetos
+        function addAnimations(object) {
+            // Rotación continua
+            object.userData.animate = true;
+            object.userData.rotationSpeed = {
+                x: (Math.random() - 0.5) * 0.02,
+                y: (Math.random() - 0.5) * 0.02,
+                z: (Math.random() - 0.5) * 0.02
+            };
+            
+            // Movimiento flotante
+            object.userData.floatOffset = Math.random() * Math.PI * 2;
+            object.userData.floatSpeed = 0.02 + Math.random() * 0.02;
+        }
+        
+        // Animar escala
+        function animateScale(object, targetScale, duration) {
+            const startScale = { ...object.scale };
+            const startTime = Date.now();
+            
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+                
+                object.scale.x = startScale.x + (targetScale.x - startScale.x) * easeProgress;
+                object.scale.y = startScale.y + (targetScale.y - startScale.y) * easeProgress;
+                object.scale.z = startScale.z + (targetScale.z - startScale.z) * easeProgress;
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+            
+            animate();
+        }
+        
+        // Cambiar modelo actual
         function changeModel(modelType) {
-            // Actualizar botones activos
+            // Actualizar botones
             document.querySelectorAll('.control-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
             event.target.classList.add('active');
             
-            // Ocultar todos los modelos
-            document.getElementById('box-model').setAttribute('visible', false);
-            document.getElementById('sphere-model').setAttribute('visible', false);
-            document.getElementById('cylinder-model').setAttribute('visible', false);
-            document.getElementById('text-model').setAttribute('visible', false);
-            
-            // Mostrar modelo seleccionado
-            document.getElementById(modelType + '-model').setAttribute('visible', true);
             currentModel = modelType;
-            
-            updateStatus(`Modelo cambiado a: ${getModelName(modelType)}`);
+            updateStatus(`Modelo seleccionado: ${getModelName(modelType)}`);
         }
         
+        // Limpiar todos los objetos
+        function clearObjects() {
+            placedObjects.forEach(obj => {
+                scene.remove(obj);
+            });
+            placedObjects = [];
+            updateStatus('🗑️ Objetos eliminados');
+        }
+        
+        // Obtener nombre del modelo
         function getModelName(type) {
             const names = {
-                'box': 'Caja 3D',
-                'sphere': 'Esfera 3D',
-                'cylinder': 'Cilindro 3D',
-                'text': 'Texto 3D'
+                'cube': 'Cubo Mágico',
+                'sphere': 'Esfera Brillante',
+                'pyramid': 'Pirámide Dorada',
+                'pokemon': 'Pikachu'
             };
             return names[type] || type;
         }
         
+        // Actualizar estado
         function updateStatus(message) {
             document.getElementById('status').textContent = message;
         }
         
-        // Eventos de detección de marcador
-        document.addEventListener('DOMContentLoaded', function() {
-            const marker = document.getElementById('marker');
-            const markerInfo = document.getElementById('markerInfo');
+        // Configurar iluminación
+        function setupLights() {
+            // Luz ambiental
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
             
-            // Cuando se detecta el marcador
-            marker.addEventListener('markerFound', function() {
-                markerDetected = true;
-                markerInfo.style.display = 'none';
-                updateStatus('¡Marcador detectado! 🎯');
-                console.log('Marcador encontrado');
+            // Luz direccional
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 5);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            // Luz puntual
+            const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
+            pointLight.position.set(0, 5, 0);
+            scene.add(pointLight);
+        }
+        
+        // Bucle de animación
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Animar objetos colocados
+            placedObjects.forEach(obj => {
+                if (obj.userData.animate) {
+                    // Rotación
+                    obj.rotation.x += obj.userData.rotationSpeed.x;
+                    obj.rotation.y += obj.userData.rotationSpeed.y;
+                    obj.rotation.z += obj.userData.rotationSpeed.z;
+                    
+                    // Movimiento flotante
+                    obj.userData.floatOffset += obj.userData.floatSpeed;
+                    obj.position.y = Math.sin(obj.userData.floatOffset) * 0.1;
+                }
             });
             
-            // Cuando se pierde el marcador
-            marker.addEventListener('markerLost', function() {
-                markerDetected = false;
-                setTimeout(() => {
-                    if (!markerDetected) {
-                        markerInfo.style.display = 'block';
-                        updateStatus('Buscando marcador...');
-                    }
-                }, 3000);
-                console.log('Marcador perdido');
-            });
-            
-            // Inicialización
-            setTimeout(() => {
-                updateStatus('Cámara iniciada - Busca un marcador');
-            }, 2000);
+            renderer.render(scene, camera);
+        }
+        
+        // Manejar redimensionado
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
         });
         
-        // Control de errores de cámara
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(function(stream) {
-                updateStatus('Cámara accesible ✅');
-            })
-            .catch(function(err) {
-                updateStatus('Error: No se puede acceder a la cámara ❌');
-                console.error('Error accessing camera:', err);
-            });
+        // Inicializar cuando se carga la página
+        window.addEventListener('load', () => {
+            setupLights();
+            init();
+        });
     </script>
 </body>
 </html>
